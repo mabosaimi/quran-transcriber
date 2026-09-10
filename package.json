@@ -1,0 +1,22 @@
+{
+  "name": "quran-transcriber",
+  "version": "0.1.0",
+  "description": "Follow along with Quran recitations via real-time Arabic speech recognition",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wxt",
+    "build": "wxt build",
+    "zip": "wxt zip",
+    "postinstall": "wxt prepare",
+    "check": "biome check .",
+    "check:fix": "biome check --fix .",
+    "format": "biome format --write ."
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.5.12",
+    "@types/dom-speech-recognition": "^0.0.12",
+    "typescript": "^7.0.0",
+    "wxt": "^0.21.4"
+  }
+}

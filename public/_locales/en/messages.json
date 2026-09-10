@@ -1,0 +1,30 @@
+{
+  "extName": {
+    "message": "Quran Transcriber",
+    "description": "The name of the extension"
+  },
+  "extDescription": {
+    "message": "Follow along with Quran recitations via real-time Arabic speech recognition",
+    "description": "The description of the extension"
+  },
+  "startCapture": {
+    "message": "Start Listening",
+    "description": "Button label to begin audio capture"
+  },
+  "stopCapture": {
+    "message": "Stop Listening",
+    "description": "Button label to stop audio capture"
+  },
+  "statusIdle": {
+    "message": "Ready",
+    "description": "Status when not capturing"
+  },
+  "statusCapturing": {
+    "message": "Listening...",
+    "description": "Status when actively capturing audio"
+  },
+  "transcriptPlaceholder": {
+    "message": "Transcript will appear here...",
+    "description": "Placeholder text in the transcript area"
+  }
+}

@@ -1,0 +1,141 @@
+:root {
+  --color-bg: #ffffff;
+  --color-surface: #f8f9fa;
+  --color-text: #1a1a2e;
+  --color-text-secondary: #6b7280;
+  --color-primary: #1b6b4a;
+  --color-primary-hover: #155a3e;
+  --color-danger: #dc2626;
+  --color-border: #e5e7eb;
+  --color-status-idle: #6b7280;
+  --color-status-capturing: #16a34a;
+  --radius: 8px;
+  --font-arabic: "Amiri", "Traditional Arabic", serif;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-bg: #0f172a;
+    --color-surface: #1e293b;
+    --color-text: #f1f5f9;
+    --color-text-secondary: #94a3b8;
+    --color-primary: #22c55e;
+    --color-primary-hover: #16a34a;
+    --color-border: #334155;
+    --color-status-idle: #94a3b8;
+    --color-status-capturing: #4ade80;
+  }
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: system-ui, -apple-system, sans-serif;
+  background: var(--color-bg);
+  color: var(--color-text);
+  min-height: 100vh;
+}
+
+#app {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  padding: 16px;
+  gap: 16px;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.title {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.status {
+  font-size: 13px;
+  font-weight: 500;
+  padding: 2px 8px;
+  border-radius: 12px;
+}
+
+.status--idle {
+  color: var(--color-status-idle);
+}
+
+.status--starting,
+.status--stopping {
+  color: var(--color-text-secondary);
+}
+
+.status--capturing {
+  color: var(--color-status-capturing);
+}
+
+.main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.transcript {
+  flex: 1;
+  font-family: var(--font-arabic);
+  font-size: 22px;
+  line-height: 2;
+  padding: 16px;
+  background: var(--color-surface);
+  border-radius: var(--radius);
+  border: 1px solid var(--color-border);
+  overflow-y: auto;
+  min-height: 200px;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+
+.transcript:empty::before {
+  content: attr(data-placeholder);
+  color: var(--color-text-secondary);
+  font-family: system-ui, -apple-system, sans-serif;
+  font-size: 14px;
+}
+
+.footer {
+  padding-top: 12px;
+  border-top: 1px solid var(--color-border);
+}
+
+.btn {
+  display: block;
+  width: 100%;
+  padding: 12px 16px;
+  font-size: 14px;
+  font-weight: 600;
+  border: none;
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn--primary {
+  background: var(--color-primary);
+  color: #ffffff;
+}
+
+.btn--primary:hover:not(:disabled) {
+  background: var(--color-primary-hover);
+}

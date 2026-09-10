@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en" dir="ltr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Quran Transcriber</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <div id="app">
+      <header class="header">
+        <h1 class="title" data-i18n="extName">Quran Transcriber</h1>
+        <span id="status" class="status status--idle" data-i18n="statusIdle">Ready</span>
+      </header>
+
+      <main class="main">
+        <div id="transcript" class="transcript" dir="rtl" lang="ar"
+             data-i18n-placeholder="transcriptPlaceholder"></div>
+      </main>
+
+      <footer class="footer">
+        <button id="toggle-btn" class="btn btn--primary" type="button"
+                data-i18n="startCapture">Start Listening</button>
+      </footer>
+    </div>
+
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

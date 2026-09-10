@@ -1,0 +1,30 @@
+{
+  "extName": {
+    "message": "ناسخ القرآن",
+    "description": "اسم الإضافة"
+  },
+  "extDescription": {
+    "message": "تابع تلاوات القرآن الكريم عبر التعرف الآلي على الكلام العربي",
+    "description": "وصف الإضافة"
+  },
+  "startCapture": {
+    "message": "بدء الاستماع",
+    "description": "زر بدء التقاط الصوت"
+  },
+  "stopCapture": {
+    "message": "إيقاف الاستماع",
+    "description": "زر إيقاف التقاط الصوت"
+  },
+  "statusIdle": {
+    "message": "جاهز",
+    "description": "الحالة عند عدم التقاط الصوت"
+  },
+  "statusCapturing": {
+    "message": "جارٍ الاستماع...",
+    "description": "الحالة أثناء التقاط الصوت"
+  },
+  "transcriptPlaceholder": {
+    "message": "سيظهر النص هنا...",
+    "description": "نص مؤقت في منطقة النسخ"
+  }
+}
