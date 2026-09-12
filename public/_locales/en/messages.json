@@ -26,5 +26,9 @@
   "transcriptPlaceholder": {
     "message": "Transcript will appear here...",
     "description": "Placeholder text in the transcript area"
+  },
+  "clickIconToStart": {
+    "message": "Click the extension icon in the browser toolbar to start listening to the active tab.",
+    "description": "Instruction shown in the side panel when idle"
   }
 }

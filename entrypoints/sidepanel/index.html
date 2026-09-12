@@ -10,7 +10,7 @@
     <div id="app">
       <header class="header">
         <h1 class="title" data-i18n="extName">Quran Transcriber</h1>
-        <span id="status" class="status status--idle" data-i18n="statusIdle">Ready</span>
+        <span id="status" class="status status--idle" data-i18n="statusIdle" role="status" aria-live="polite">Ready</span>
       </header>
 
       <main class="main">
@@ -19,6 +19,9 @@
       </main>
 
       <footer class="footer">
+        <div id="idle-hint" class="idle-hint" hidden>
+          <p class="idle-hint__text" data-i18n="clickIconToStart">Click the extension icon in the browser toolbar to start listening to the active tab.</p>
+        </div>
         <button id="toggle-btn" class="btn btn--primary" type="button"
                 data-i18n="startCapture">Start Listening</button>
       </footer>
