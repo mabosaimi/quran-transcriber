@@ -99,7 +99,6 @@ export class QuranMatcher {
       this.lastMatchedIndex !== null &&
       (bestIndex === this.lastMatchedIndex + 1 || bestIndex === this.lastMatchedIndex);
 
-    // Dynamic acceptance thresholds
     if (isSequential) {
       if (rawTokenMatches < 2 && tokens.length > 2) return null;
     } else {

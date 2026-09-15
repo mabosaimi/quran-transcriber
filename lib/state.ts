@@ -1,4 +1,5 @@
 import { storage } from 'wxt/utils/storage';
+import type { MatchResult } from './matcher';
 
 export const CaptureState = {
   IDLE: 'idle',
@@ -8,6 +9,13 @@ export const CaptureState = {
 } as const;
 
 export type CaptureStateValue = (typeof CaptureState)[keyof typeof CaptureState];
+
+export interface MatchedAyah extends MatchResult {
+  surahNameArabic?: string;
+  surahNameEnglish?: string;
+  totalAyahs?: number;
+  ayahMarker?: string;
+}
 
 export const captureStateItem = storage.defineItem<CaptureStateValue>('session:captureState', {
   fallback: CaptureState.IDLE,
@@ -19,4 +27,8 @@ export const activeTabIdItem = storage.defineItem<number | null>('session:active
 
 export const transcriptItem = storage.defineItem<string>('session:transcript', {
   fallback: '',
+});
+
+export const matchedAyahItem = storage.defineItem<MatchedAyah | null>('session:matchedAyah', {
+  fallback: null,
 });

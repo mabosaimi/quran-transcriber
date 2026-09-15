@@ -1,13 +1,11 @@
-import {
-  type CaptureResponseMessage,
-  MSG,
-  isExtensionMessage,
-} from '@/lib/messages';
+import { type CaptureResponseMessage, isExtensionMessage, MSG } from '@/lib/messages';
+import { formatAyahMarker, getSurahMeta } from '@/lib/quran-meta';
 import {
   activeTabIdItem,
   CaptureState,
   type CaptureStateValue,
   captureStateItem,
+  matchedAyahItem,
   transcriptItem,
 } from '@/lib/state';
 
@@ -18,7 +16,6 @@ export default defineBackground(() => {
     console.warn('Initial state reconciliation error:', err);
   });
 
-  // Capture user gesture via toolbar action click to grant activeTab and open side panel
   browser.action.onClicked.addListener(async (tab) => {
     // Preserve the user gesture token synchronously before any await boundary
     if (tab.windowId !== undefined) {
@@ -29,7 +26,6 @@ export default defineBackground(() => {
 
     let currentState = await captureStateItem.getValue();
 
-    // Self-healing: if state indicates an active session, verify an offscreen context actually exists
     if (currentState !== CaptureState.IDLE) {
       const offscreenExists = await hasOffscreenDocument();
       if (!offscreenExists) {
@@ -55,6 +51,7 @@ export default defineBackground(() => {
       console.error('Failed to initialize capture from action click:', err);
       await captureStateItem.setValue(CaptureState.IDLE);
       await updateBadge(CaptureState.IDLE);
+      await matchedAyahItem.setValue(null);
       await transcriptItem.setValue(`Error: ${(err as Error).message}`);
     }
   });
@@ -84,6 +81,7 @@ export default defineBackground(() => {
           console.error('Capture Start Error:', err);
           captureStateItem.setValue(CaptureState.IDLE);
           updateBadge(CaptureState.IDLE);
+          matchedAyahItem.setValue(null);
           sendResponse({ type: MSG.ERROR, payload: err.message });
         });
       return true;
@@ -112,9 +110,23 @@ export default defineBackground(() => {
       return;
     }
 
+    if (message.type === MSG.AYAH_MATCH) {
+      const match = message.payload;
+      const meta = getSurahMeta(match.surah);
+      matchedAyahItem.setValue({
+        ...match,
+        surahNameArabic: meta?.nameArabic,
+        surahNameEnglish: meta?.nameEnglish,
+        totalAyahs: meta?.totalAyahs,
+        ayahMarker: formatAyahMarker(match.ayah),
+      });
+      return;
+    }
+
     if (message.type === MSG.ERROR) {
       console.error('Offscreen Error:', message.payload);
       captureStateItem.setValue(CaptureState.IDLE);
+      matchedAyahItem.setValue(null);
       transcriptItem.setValue(`Error: ${message.payload}`);
       updateBadge(CaptureState.IDLE);
       return;
@@ -142,6 +154,7 @@ export default defineBackground(() => {
 
     await captureStateItem.setValue(CaptureState.STARTING);
     await transcriptItem.setValue('');
+    await matchedAyahItem.setValue(null);
 
     try {
       await ensureOffscreenDocument();
@@ -166,6 +179,7 @@ export default defineBackground(() => {
       return { type: MSG.CAPTURE_STARTED };
     } catch (err) {
       await captureStateItem.setValue(CaptureState.IDLE);
+      await matchedAyahItem.setValue(null);
       await updateBadge(CaptureState.IDLE);
       throw err;
     }
@@ -183,6 +197,7 @@ export default defineBackground(() => {
 
     await captureStateItem.setValue(CaptureState.IDLE);
     await activeTabIdItem.setValue(null);
+    await matchedAyahItem.setValue(null);
     await updateBadge(CaptureState.IDLE);
 
     return { type: MSG.CAPTURE_STOPPED };
@@ -222,6 +237,7 @@ export default defineBackground(() => {
         console.info('Reconciling stale capture state on service worker wake-up:', currentState);
         await captureStateItem.setValue(CaptureState.IDLE);
         await activeTabIdItem.setValue(null);
+        await matchedAyahItem.setValue(null);
         await updateBadge(CaptureState.IDLE);
       }
     }

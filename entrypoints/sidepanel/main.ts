@@ -1,37 +1,73 @@
-import {
-  type CaptureResponseMessage,
-  MSG,
-} from '@/lib/messages';
+import { type CaptureResponseMessage, MSG } from '@/lib/messages';
 import {
   CaptureState,
   type CaptureStateValue,
   captureStateItem,
+  type MatchedAyah,
+  matchedAyahItem,
   transcriptItem,
 } from '@/lib/state';
 
 type I18nKey = Parameters<typeof browser.i18n.getMessage>[0];
 
-// Cached element references, initialized safely after DOM readiness
 let toggleBtn: HTMLButtonElement;
 let idleHint: HTMLElement;
 let statusEl: HTMLElement;
-let transcriptEl: HTMLElement;
+let errorBanner: HTMLElement;
+let placeholderView: HTMLElement;
+let placeholderText: HTMLElement;
+let listeningIndicator: HTMLElement;
+let ayahCard: HTMLElement;
+let surahArabicEl: HTMLElement;
+let surahEnglishEl: HTMLElement;
+let ayahBadgeEl: HTMLElement;
+let ayahTextEl: HTMLElement;
+let liveSpeechStrip: HTMLElement;
+let liveSpeechTextEl: HTMLElement;
 
-// State flags for deterministic UI transitions
+let currentCaptureState: CaptureStateValue = CaptureState.IDLE;
+let currentMatchedAyah: MatchedAyah | null = null;
+let renderedAyahKey = '';
+let currentTranscript = '';
 let activeTabRequired = false;
 let isToggling = false;
 
-// Subscriptions to clean up on sidepanel unload
 let unwatchState: (() => void) | undefined;
 let unwatchTranscript: (() => void) | undefined;
+let unwatchMatchedAyah: (() => void) | undefined;
 
 function queryDOMElements(): boolean {
   const btn = document.getElementById('toggle-btn') as HTMLButtonElement | null;
   const hint = document.getElementById('idle-hint');
   const status = document.getElementById('status');
-  const transcript = document.getElementById('transcript');
+  const error = document.getElementById('error-banner');
+  const placeholder = document.getElementById('placeholder-view');
+  const text = document.getElementById('placeholder-text');
+  const indicator = document.getElementById('listening-indicator');
+  const card = document.getElementById('ayah-card');
+  const surahAr = document.getElementById('surah-arabic');
+  const surahEn = document.getElementById('surah-english');
+  const badge = document.getElementById('ayah-badge');
+  const ayahTxt = document.getElementById('ayah-text');
+  const liveStrip = document.getElementById('live-speech-strip');
+  const liveText = document.getElementById('live-speech-text');
 
-  if (!btn || !hint || !status || !transcript) {
+  if (
+    !btn ||
+    !hint ||
+    !status ||
+    !error ||
+    !placeholder ||
+    !text ||
+    !indicator ||
+    !card ||
+    !surahAr ||
+    !surahEn ||
+    !badge ||
+    !ayahTxt ||
+    !liveStrip ||
+    !liveText
+  ) {
     console.error('Missing required side panel DOM elements');
     return false;
   }
@@ -39,11 +75,27 @@ function queryDOMElements(): boolean {
   toggleBtn = btn;
   idleHint = hint;
   statusEl = status;
-  transcriptEl = transcript;
+  errorBanner = error;
+  placeholderView = placeholder;
+  placeholderText = text;
+  listeningIndicator = indicator;
+  ayahCard = card;
+  surahArabicEl = surahAr;
+  surahEnglishEl = surahEn;
+  ayahBadgeEl = badge;
+  ayahTextEl = ayahTxt;
+  liveSpeechStrip = liveStrip;
+  liveSpeechTextEl = liveText;
+
   return true;
 }
 
 function localizeUI(): void {
+  const bidiDir = browser.i18n.getMessage('@@bidi_dir');
+  if (bidiDir) document.documentElement.dir = bidiDir;
+  const uiLocale = browser.i18n.getUILanguage?.();
+  if (uiLocale) document.documentElement.lang = uiLocale;
+
   for (const el of document.querySelectorAll<HTMLElement>('[data-i18n]')) {
     const key = el.dataset.i18n as I18nKey | undefined;
     if (key) el.textContent = browser.i18n.getMessage(key);
@@ -56,13 +108,19 @@ function localizeUI(): void {
 }
 
 async function hydrateState(): Promise<void> {
-  const [currentState, currentTranscript] = await Promise.all([
+  const [state, transcript, matchedAyah] = await Promise.all([
     captureStateItem.getValue(),
     transcriptItem.getValue(),
+    matchedAyahItem.getValue(),
   ]);
 
-  updateUI(currentState);
-  renderTranscript(currentTranscript ?? '');
+  currentCaptureState = state;
+  currentTranscript = transcript ?? '';
+  currentMatchedAyah = matchedAyah ?? null;
+
+  updateUI(state);
+  renderAyah(currentMatchedAyah);
+  renderTranscript(currentTranscript);
 }
 
 async function handleToggle(): Promise<void> {
@@ -98,7 +156,6 @@ async function handleToggle(): Promise<void> {
           errStr.includes('invoked') ||
           errStr.includes('captured')
         ) {
-          // Flag that activeTab permission is required via toolbar icon
           activeTabRequired = true;
         }
       } else {
@@ -114,9 +171,9 @@ async function handleToggle(): Promise<void> {
 }
 
 function updateUI(state: CaptureStateValue): void {
+  currentCaptureState = state;
   const isCapturing = state === CaptureState.CAPTURING;
-  const isTransitioning =
-    state === CaptureState.STARTING || state === CaptureState.STOPPING;
+  const isTransitioning = state === CaptureState.STARTING || state === CaptureState.STOPPING;
 
   if (isCapturing) {
     activeTabRequired = false;
@@ -134,7 +191,6 @@ function updateUI(state: CaptureStateValue): void {
   } else {
     toggleBtn.setAttribute('aria-busy', 'false');
     if (activeTabRequired) {
-      // Prompt user to click toolbar action to satisfy activeTab permission requirement
       idleHint.hidden = false;
       toggleBtn.hidden = true;
     } else {
@@ -146,21 +202,75 @@ function updateUI(state: CaptureStateValue): void {
     }
   }
 
-  statusEl.textContent = browser.i18n.getMessage(
-    isCapturing ? 'statusCapturing' : 'statusIdle',
-  );
+  statusEl.textContent = browser.i18n.getMessage(isCapturing ? 'statusCapturing' : 'statusIdle');
   statusEl.className = `status status--${state}`;
 }
 
-function renderTranscript(text: string): void {
-  transcriptEl.textContent = text;
-  if (text.startsWith('Error:')) {
-    transcriptEl.classList.add('transcript--error');
+function renderAyah(ayah: MatchedAyah | null): void {
+  currentMatchedAyah = ayah;
+  const isCardVisible = Boolean(ayah && currentCaptureState === CaptureState.CAPTURING);
+
+  if (isCardVisible && ayah) {
+    if (placeholderView.hidden !== true) placeholderView.hidden = true;
+    if (ayahCard.hidden !== false) ayahCard.hidden = false;
+
+    const newKey = `${ayah.surah}:${ayah.ayah}:${ayah.index}`;
+    if (renderedAyahKey !== newKey) {
+      renderedAyahKey = newKey;
+
+      surahArabicEl.textContent = ayah.surahNameArabic
+        ? `سورة ${ayah.surahNameArabic}`
+        : `سورة ${ayah.surah}`;
+      surahEnglishEl.textContent = ayah.surahNameEnglish ?? '';
+
+      ayahBadgeEl.textContent = ayah.totalAyahs
+        ? `${ayah.surah}:${ayah.ayah} (${ayah.ayah}/${ayah.totalAyahs})`
+        : `${ayah.surah}:${ayah.ayah}`;
+
+      const marker = ayah.ayahMarker ? `\u00A0${ayah.ayahMarker}` : '';
+      ayahTextEl.textContent = `${ayah.uthmani}${marker}`.trim();
+    }
   } else {
-    transcriptEl.classList.remove('transcript--error');
+    renderedAyahKey = '';
+    if (ayahCard.hidden !== true) ayahCard.hidden = true;
+    if (placeholderView.hidden !== false) placeholderView.hidden = false;
+
+    const isListening =
+      currentCaptureState === CaptureState.CAPTURING ||
+      currentCaptureState === CaptureState.STARTING;
+    const msgKey: I18nKey = isListening ? 'listeningForRecitation' : 'readyToListen';
+    const nextText = browser.i18n.getMessage(msgKey);
+
+    if (placeholderText.textContent !== nextText) {
+      placeholderText.textContent = nextText;
+    }
+    if (listeningIndicator.hidden !== !isListening) {
+      listeningIndicator.hidden = !isListening;
+    }
   }
-  // Auto-scroll to bottom as new speech segments arrive
-  transcriptEl.scrollTop = transcriptEl.scrollHeight;
+}
+
+function renderTranscript(text: string): void {
+  currentTranscript = text;
+
+  if (text.startsWith('Error:')) {
+    if (errorBanner.textContent !== text) {
+      errorBanner.textContent = text;
+    }
+    if (errorBanner.hidden !== false) errorBanner.hidden = false;
+    if (liveSpeechStrip.hidden !== true) liveSpeechStrip.hidden = true;
+  } else {
+    if (errorBanner.hidden !== true) errorBanner.hidden = true;
+
+    if (text.trim() && currentCaptureState === CaptureState.CAPTURING) {
+      if (liveSpeechStrip.hidden !== false) liveSpeechStrip.hidden = false;
+      if (liveSpeechTextEl.textContent !== text) {
+        liveSpeechTextEl.textContent = text;
+      }
+    } else {
+      if (liveSpeechStrip.hidden !== true) liveSpeechStrip.hidden = true;
+    }
+  }
 }
 
 async function init(): Promise<void> {
@@ -172,7 +282,14 @@ async function init(): Promise<void> {
   toggleBtn.addEventListener('click', handleToggle);
 
   unwatchState = captureStateItem.watch((newState: CaptureStateValue | null) => {
-    updateUI(newState ?? CaptureState.IDLE);
+    const s = newState ?? CaptureState.IDLE;
+    updateUI(s);
+    renderAyah(currentMatchedAyah);
+    renderTranscript(currentTranscript);
+  });
+
+  unwatchMatchedAyah = matchedAyahItem.watch((newAyah: MatchedAyah | null) => {
+    renderAyah(newAyah);
   });
 
   unwatchTranscript = transcriptItem.watch((newTranscript: string | null) => {
@@ -187,6 +304,10 @@ function cleanup(): void {
     unwatchState();
     unwatchState = undefined;
   }
+  if (unwatchMatchedAyah) {
+    unwatchMatchedAyah();
+    unwatchMatchedAyah = undefined;
+  }
   if (unwatchTranscript) {
     unwatchTranscript();
     unwatchTranscript = undefined;
@@ -194,7 +315,6 @@ function cleanup(): void {
   toggleBtn?.removeEventListener('click', handleToggle);
 }
 
-// Bootstrap initialization based on document readyState
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', () => {
     init().catch(console.error);

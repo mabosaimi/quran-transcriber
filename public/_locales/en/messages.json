@@ -30,5 +30,17 @@
   "clickIconToStart": {
     "message": "Click the extension icon in the browser toolbar to start listening to the active tab.",
     "description": "Instruction shown in the side panel when idle"
+  },
+  "listeningForRecitation": {
+    "message": "Listening for recitation...",
+    "description": "Message shown when capturing audio before a verse is matched"
+  },
+  "readyToListen": {
+    "message": "Play Quran recitation in any tab and click Start Listening.",
+    "description": "Prompt shown when idle"
+  },
+  "liveSpeechLabel": {
+    "message": "Live Speech",
+    "description": "Label for interim speech transcript"
   }
 }
