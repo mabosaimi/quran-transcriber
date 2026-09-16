@@ -4,6 +4,7 @@
   "description": "Follow along with Quran recitations via real-time Arabic speech recognition",
   "private": true,
   "type": "module",
+  "packageManager": "pnpm@12.4.2",
   "scripts": {
     "dev": "wxt",
     "build": "wxt build",
