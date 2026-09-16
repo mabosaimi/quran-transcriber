@@ -1,6 +1,9 @@
 {
   "extends": "./.wxt/tsconfig.json",
   "compilerOptions": {
-    "types": ["dom-speech-recognition"]
+    "types": ["dom-speech-recognition"],
+    "paths": {
+      "@/*": ["./*"]
+    }
   }
 }
