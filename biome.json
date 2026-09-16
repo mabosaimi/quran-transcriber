@@ -18,6 +18,9 @@
   "linter": {
     "rules": {
       "preset": "recommended",
+      "complexity": {
+        "noImportantStyles": "off"
+      },
       "style": {
         "noHexColors": "off"
       }

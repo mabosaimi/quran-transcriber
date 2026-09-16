@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import {
   formatAyahMarker,
   getSurahMeta,
+  isSajdah,
+  SAJDAH_AYAHS,
   SURAHS,
   toArabicNumerals,
 } from '@/lib/quran-meta';
@@ -74,6 +76,27 @@ describe('quran-meta', () => {
       const marker = formatAyahMarker(5);
       expect(marker.charCodeAt(0)).toBe(0xfd3f);
       expect(marker.charCodeAt(marker.length - 1)).toBe(0xfd3e);
+    });
+  });
+
+  describe('isSajdah & SAJDAH_AYAHS', () => {
+    it('contains exactly 15 canonical Sajdah ayahs', () => {
+      expect(SAJDAH_AYAHS.size).toBe(15);
+    });
+
+    it('identifies canonical Sajdah verses correctly', () => {
+      expect(isSajdah(7, 206)).toBe(true);
+      expect(isSajdah(13, 15)).toBe(true);
+      expect(isSajdah(22, 18)).toBe(true);
+      expect(isSajdah(22, 77)).toBe(true);
+      expect(isSajdah(32, 15)).toBe(true);
+      expect(isSajdah(96, 19)).toBe(true);
+    });
+
+    it('returns false for non-Sajdah verses', () => {
+      expect(isSajdah(1, 1)).toBe(false);
+      expect(isSajdah(2, 255)).toBe(false);
+      expect(isSajdah(114, 6)).toBe(false);
     });
   });
 });

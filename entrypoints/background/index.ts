@@ -1,5 +1,5 @@
 import { type CaptureResponseMessage, isExtensionMessage, MSG } from '@/lib/messages';
-import { formatAyahMarker, getSurahMeta } from '@/lib/quran-meta';
+import { formatAyahMarker, getSurahMeta, isSajdah } from '@/lib/quran-meta';
 import {
   activeTabIdItem,
   CaptureState,
@@ -119,6 +119,7 @@ export default defineBackground(() => {
         surahNameEnglish: meta?.nameEnglish,
         totalAyahs: meta?.totalAyahs,
         ayahMarker: formatAyahMarker(match.ayah),
+        isSajdah: isSajdah(match.surah, match.ayah),
       });
       return;
     }

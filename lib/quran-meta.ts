@@ -168,3 +168,25 @@ export function formatAyahMarker(ayahNumber: number): string {
   // \uFD3F (﴿) opens and \uFD3E (﴾) closes in RTL; neither bidi-mirrors
   return `\uFD3F${toArabicNumerals(ayahNumber)}\uFD3E`;
 }
+
+export const SAJDAH_AYAHS: ReadonlySet<string> = new Set([
+  '7:206',
+  '13:15',
+  '16:50',
+  '17:109',
+  '19:58',
+  '22:18',
+  '22:77',
+  '25:60',
+  '27:26',
+  '32:15',
+  '38:24',
+  '41:38',
+  '53:62',
+  '84:21',
+  '96:19',
+]);
+
+export function isSajdah(surah: number, ayah: number): boolean {
+  return SAJDAH_AYAHS.has(`${surah}:${ayah}`);
+}

@@ -42,5 +42,61 @@
   "liveSpeechLabel": {
     "message": "Live Speech",
     "description": "Label for interim speech transcript"
+  },
+  "sajdahBadge": {
+    "message": "Sajdah",
+    "description": "Badge indicating a prostration verse"
+  },
+  "settings": {
+    "message": "Settings",
+    "description": "Settings button label"
+  },
+  "translations": {
+    "message": "Translations",
+    "description": "Translations section header"
+  },
+  "transliteration": {
+    "message": "Transliteration",
+    "description": "Transliteration toggle label"
+  },
+  "downloading": {
+    "message": "Downloading...",
+    "description": "Indicator when downloading an edition"
+  },
+  "offlineNotice": {
+    "message": "Offline - connect to download",
+    "description": "Notice shown when offline and translation not cached"
+  },
+  "close": {
+    "message": "Close",
+    "description": "Close button label"
+  },
+  "statusStarting": {
+    "message": "Connecting...",
+    "description": "Status when initiating capture"
+  },
+  "statusStopping": {
+    "message": "Stopping...",
+    "description": "Status when stopping capture"
+  },
+  "arabicOnly": {
+    "message": "Arabic Only (No Translation)",
+    "description": "Option to display only the original Arabic recitation"
+  },
+  "arabicOnlyDesc": {
+    "message": "Display original Quranic recitation only",
+    "description": "Subtitle for Arabic-only option"
+  },
+  "download": {
+    "message": "Download",
+    "description": "Action button to download translation"
+  },
+  "downloaded": {
+    "message": "Downloaded",
+    "description": "Badge showing translation is downloaded"
+  },
+  "approxSize": {
+    "message": "~1.2 MB",
+    "description": "Approximate file size of an edition download"
   }
 }

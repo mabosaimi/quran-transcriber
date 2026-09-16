@@ -19,8 +19,12 @@
   "devDependencies": {
     "@biomejs/biome": "2.5.12",
     "@types/dom-speech-recognition": "^0.0.12",
+    "fake-indexeddb": "^6.2.5",
     "typescript": "^7.0.0",
     "vitest": "^5.0.1",
     "wxt": "^0.21.4"
+  },
+  "dependencies": {
+    "idb-keyval": "^6.3.0"
   }
 }

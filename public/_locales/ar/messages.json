@@ -42,5 +42,61 @@
   "liveSpeechLabel": {
     "message": "الكلام المباشر",
     "description": "وصف للنص المنطوق المباشر"
+  },
+  "sajdahBadge": {
+    "message": "سجدة",
+    "description": "شارة تدل على آية سجدة"
+  },
+  "settings": {
+    "message": "الإعدادات",
+    "description": "زر الإعدادات"
+  },
+  "translations": {
+    "message": "الترجمات",
+    "description": "عنوان قسم الترجمات"
+  },
+  "transliteration": {
+    "message": "النسخ الصوتي",
+    "description": "تفعيل النسخ الصوتي"
+  },
+  "downloading": {
+    "message": "جارٍ التحميل...",
+    "description": "مؤشر تحميل الترجمة"
+  },
+  "offlineNotice": {
+    "message": "غير متصل - اتصل لتحميل الترجمة",
+    "description": "تنبيه عند عدم الاتصال بالإنترنت وعدم توفر الترجمة"
+  },
+  "close": {
+    "message": "إغلاق",
+    "description": "زر الإغلاق"
+  },
+  "statusStarting": {
+    "message": "جارٍ الاتصال...",
+    "description": "الحالة عند بدء الاتصال بالصوت"
+  },
+  "statusStopping": {
+    "message": "جارٍ الإيقاف...",
+    "description": "الحالة عند إيقاف التقاط الصوت"
+  },
+  "arabicOnly": {
+    "message": "النص القرآني فقط (بدون ترجمة)",
+    "description": "خيار عرض النص القرآني فقط"
+  },
+  "arabicOnlyDesc": {
+    "message": "عرض التلاوة والآيات القرآنية الشريفة فقط",
+    "description": "وصف خيار النص القرآني فقط"
+  },
+  "download": {
+    "message": "تحميل",
+    "description": "زر تحميل الترجمة"
+  },
+  "downloaded": {
+    "message": "تم التحميل",
+    "description": "شارة تم تحميل الترجمة"
+  },
+  "approxSize": {
+    "message": "~1.2 ميغابايت",
+    "description": "الحجم التقريبي لملف الترجمة"
   }
 }

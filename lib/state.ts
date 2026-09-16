@@ -15,6 +15,14 @@ export interface MatchedAyah extends MatchResult {
   surahNameEnglish?: string;
   totalAyahs?: number;
   ayahMarker?: string;
+  isSajdah?: boolean;
+}
+
+export interface UserEditionPreferences {
+  activeTranslationId: string | null;
+  activeTranslationIds?: string[];
+  showTransliteration: boolean;
+  activeTransliterationId: string;
 }
 
 export const captureStateItem = storage.defineItem<CaptureStateValue>('session:captureState', {
@@ -32,3 +40,15 @@ export const transcriptItem = storage.defineItem<string>('session:transcript', {
 export const matchedAyahItem = storage.defineItem<MatchedAyah | null>('session:matchedAyah', {
   fallback: null,
 });
+
+export const userPreferencesItem = storage.defineItem<UserEditionPreferences>(
+  'local:userEditionPreferences',
+  {
+    fallback: {
+      activeTranslationId: null,
+      activeTranslationIds: [],
+      showTransliteration: false,
+      activeTransliterationId: 'en.transliteration',
+    },
+  },
+);

@@ -6,6 +6,7 @@ export default defineConfig({
     description: '__MSG_extDescription__',
     default_locale: 'en',
     permissions: ['tabCapture', 'offscreen', 'storage', 'activeTab', 'sidePanel'],
+    host_permissions: ['https://api.alquran.cloud/*'],
     minimum_chrome_version: '116',
     action: {},
   },
