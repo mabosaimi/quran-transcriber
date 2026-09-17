@@ -19,6 +19,7 @@ export interface MatchedAyah extends MatchResult {
 }
 
 export interface UserEditionPreferences {
+  showArabic?: boolean;
   activeTranslationId: string | null;
   activeTranslationIds?: string[];
   showTransliteration: boolean;
@@ -45,6 +46,7 @@ export const userPreferencesItem = storage.defineItem<UserEditionPreferences>(
   'local:userEditionPreferences',
   {
     fallback: {
+      showArabic: true,
       activeTranslationId: null,
       activeTranslationIds: [],
       showTransliteration: false,

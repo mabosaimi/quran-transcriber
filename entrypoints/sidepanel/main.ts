@@ -1,8 +1,10 @@
 import {
   CURATED_EDITIONS,
+  deleteCachedEdition,
   fetchAndCacheEdition,
   getCachedEdition,
   getCachedEditionIds,
+  getLanguageEndonym,
   loadActiveEditions,
   type StoredEdition,
 } from '@/lib/editions';
@@ -37,15 +39,15 @@ let ayahTextEl: HTMLElement;
 let transliterationContainerEl: HTMLElement;
 let transliterationTextEl: HTMLElement;
 let translationsContainerEl: HTMLElement;
-let liveSpeechStrip: HTMLElement;
-let liveSpeechTextEl: HTMLElement;
+
+let toggleArabicBtn: HTMLButtonElement;
+let toggleTranslitBtn: HTMLButtonElement;
+let translationSelectEl: HTMLSelectElement;
 
 let settingsBtn: HTMLButtonElement;
 let settingsDialog: HTMLDialogElement;
 let settingsCloseBtn: HTMLButtonElement;
-let toggleTransliterationInput: HTMLInputElement;
 let editionsListEl: HTMLElement;
-let transliterationStatusEl: HTMLElement | null = null;
 
 let currentCaptureState: CaptureStateValue = CaptureState.IDLE;
 let currentMatchedAyah: MatchedAyah | null = null;
@@ -56,6 +58,7 @@ let activeTabRequired = false;
 
 let activeEditions = new Map<string, StoredEdition>();
 let currentUserPreferences: UserEditionPreferences = {
+  showArabic: true,
   activeTranslationId: null,
   activeTranslationIds: [],
   showTransliteration: false,
@@ -85,13 +88,14 @@ function queryDOMElements(): boolean {
   const translitCont = document.getElementById('transliteration-container');
   const translitTxt = document.getElementById('transliteration-text');
   const translationsCont = document.getElementById('translations-container');
-  const liveStrip = document.getElementById('live-speech-strip');
-  const liveText = document.getElementById('live-speech-text');
+
+  const tArabicBtn = document.getElementById('toggle-arabic-btn') as HTMLButtonElement | null;
+  const tTranslitBtn = document.getElementById('toggle-translit-btn') as HTMLButtonElement | null;
+  const tSelect = document.getElementById('translation-select') as HTMLSelectElement | null;
 
   const sBtn = document.getElementById('settings-btn') as HTMLButtonElement | null;
   const sDialog = document.getElementById('settings-dialog') as HTMLDialogElement | null;
   const sCloseBtn = document.getElementById('settings-close-btn') as HTMLButtonElement | null;
-  const tTranslit = document.getElementById('toggle-transliteration') as HTMLInputElement | null;
   const eList = document.getElementById('editions-list');
 
   if (
@@ -111,12 +115,12 @@ function queryDOMElements(): boolean {
     !translitCont ||
     !translitTxt ||
     !translationsCont ||
-    !liveStrip ||
-    !liveText ||
+    !tArabicBtn ||
+    !tTranslitBtn ||
+    !tSelect ||
     !sBtn ||
     !sDialog ||
     !sCloseBtn ||
-    !tTranslit ||
     !eList
   ) {
     console.error('Missing required side panel DOM elements');
@@ -139,15 +143,15 @@ function queryDOMElements(): boolean {
   transliterationContainerEl = translitCont;
   transliterationTextEl = translitTxt;
   translationsContainerEl = translationsCont;
-  liveSpeechStrip = liveStrip;
-  liveSpeechTextEl = liveText;
+
+  toggleArabicBtn = tArabicBtn;
+  toggleTranslitBtn = tTranslitBtn;
+  translationSelectEl = tSelect;
 
   settingsBtn = sBtn;
   settingsDialog = sDialog;
   settingsCloseBtn = sCloseBtn;
-  toggleTransliterationInput = tTranslit;
   editionsListEl = eList;
-  transliterationStatusEl = document.getElementById('transliteration-status');
 
   return true;
 }
@@ -188,6 +192,7 @@ async function hydrateState(): Promise<void> {
   if (prefs) {
     currentUserPreferences = {
       ...prefs,
+      showArabic: prefs.showArabic ?? true,
       activeTranslationId:
         prefs.activeTranslationId !== undefined
           ? prefs.activeTranslationId
@@ -196,8 +201,9 @@ async function hydrateState(): Promise<void> {
   }
 
   updateUI(state);
+  await updateToolbarControls();
   renderAyah(currentMatchedAyah);
-  renderTranscript(currentTranscript);
+  handleTranscriptError(currentTranscript);
 
   activeEditions = await loadActiveEditions(currentUserPreferences);
   renderAyah(currentMatchedAyah);
@@ -299,7 +305,8 @@ function renderAyah(ayah: MatchedAyah | null): void {
         ? currentUserPreferences.activeTranslationId
         : (currentUserPreferences.activeTranslationIds?.[0] ?? null);
 
-    const newKey = `${ayah.surah}:${ayah.ayah}:${ayah.index}:${currentUserPreferences.showTransliteration}:${currentUserPreferences.activeTransliterationId}:${activeTransId ?? 'none'}`;
+    const showAr = currentUserPreferences.showArabic ?? true;
+    const newKey = `${ayah.surah}:${ayah.ayah}:${ayah.index}:${showAr}:${currentUserPreferences.showTransliteration}:${currentUserPreferences.activeTransliterationId}:${activeTransId ?? 'none'}`;
     if (renderedAyahKey !== newKey) {
       renderedAyahKey = newKey;
 
@@ -315,8 +322,15 @@ function renderAyah(ayah: MatchedAyah | null): void {
       const isSajdahVerse = Boolean(ayah.isSajdah ?? isSajdah(ayah.surah, ayah.ayah));
       sajdahBadgeEl.hidden = !isSajdahVerse;
 
-      const marker = ayah.ayahMarker ? `\u00A0${ayah.ayahMarker}` : '';
-      ayahTextEl.textContent = `${ayah.uthmani}${marker}`.trim();
+      if (showAr) {
+        ayahTextEl.hidden = false;
+        const marker = ayah.ayahMarker ? `\u00A0${ayah.ayahMarker}` : '';
+        ayahTextEl.textContent = `${ayah.uthmani}${marker}`.trim();
+      } else {
+        ayahTextEl.hidden = true;
+      }
+
+      let hasPrecedingContent = showAr;
 
       if (
         currentUserPreferences.showTransliteration &&
@@ -327,6 +341,9 @@ function renderAyah(ayah: MatchedAyah | null): void {
         if (text) {
           transliterationTextEl.textContent = text;
           transliterationContainerEl.hidden = false;
+          transliterationContainerEl.style.borderTop = hasPrecedingContent ? '' : 'none';
+          transliterationContainerEl.style.paddingTop = hasPrecedingContent ? '' : '0';
+          hasPrecedingContent = true;
         } else {
           transliterationContainerEl.hidden = true;
         }
@@ -343,12 +360,16 @@ function renderAyah(ayah: MatchedAyah | null): void {
             const block = document.createElement('div');
             block.className = 'ayah-translation-block';
             block.setAttribute('dir', edition.direction);
+            if (!hasPrecedingContent) {
+              block.style.borderTop = 'none';
+              block.style.paddingTop = '0';
+            }
 
             const label = document.createElement('span');
             label.className = 'ayah-translation-label';
 
             const bdi = document.createElement('bdi');
-            bdi.textContent = edition.englishName || edition.name;
+            bdi.textContent = getLanguageEndonym(edition.language);
             label.appendChild(bdi);
 
             const p = document.createElement('p');
@@ -382,132 +403,147 @@ function renderAyah(ayah: MatchedAyah | null): void {
   }
 }
 
-function renderTranscript(text: string): void {
-  currentTranscript = text;
-
+function handleTranscriptError(text: string): void {
   if (text.startsWith('Error:')) {
     if (errorBanner.textContent !== text) {
       errorBanner.textContent = text;
     }
     if (errorBanner.hidden !== false) errorBanner.hidden = false;
-    if (liveSpeechStrip.hidden !== true) liveSpeechStrip.hidden = true;
   } else {
     if (errorBanner.hidden !== true) errorBanner.hidden = true;
-
-    if (text.trim() && currentCaptureState === CaptureState.CAPTURING) {
-      if (liveSpeechStrip.hidden !== false) liveSpeechStrip.hidden = false;
-      if (liveSpeechTextEl.textContent !== text) {
-        liveSpeechTextEl.textContent = text;
-      }
-    } else {
-      if (liveSpeechStrip.hidden !== true) liveSpeechStrip.hidden = true;
-    }
   }
 }
 
-async function renderSettings(): Promise<void> {
-  toggleTransliterationInput.checked = currentUserPreferences.showTransliteration;
-
+async function populateTranslationSelect(): Promise<void> {
   const cachedIds = new Set(await getCachedEditionIds());
-
-  if (transliterationStatusEl) {
-    const translitId = currentUserPreferences.activeTransliterationId;
-    if (downloadingEditions.has(translitId)) {
-      transliterationStatusEl.className = 'badge badge--downloading';
-      transliterationStatusEl.textContent =
-        browser.i18n.getMessage('downloading') || 'Downloading...';
-      transliterationStatusEl.hidden = false;
-    } else if (cachedIds.has(translitId)) {
-      transliterationStatusEl.className = 'badge badge--downloaded';
-      transliterationStatusEl.textContent = `✓ ${browser.i18n.getMessage('downloaded') || 'Downloaded'}`;
-      transliterationStatusEl.hidden = false;
-    } else {
-      transliterationStatusEl.className = 'badge badge--info';
-      transliterationStatusEl.textContent = browser.i18n.getMessage('approxSize') || '~1.2 MB';
-      transliterationStatusEl.hidden = false;
-    }
-  }
-
   const activeTransId =
     currentUserPreferences.activeTranslationId !== undefined
       ? currentUserPreferences.activeTranslationId
       : (currentUserPreferences.activeTranslationIds?.[0] ?? null);
 
-  editionsListEl.innerHTML = '';
+  translationSelectEl.innerHTML = '';
 
-  const isArabicOnly = !activeTransId;
-  const arabicOnlyItem = document.createElement('div');
-  arabicOnlyItem.className = `edition-item ${isArabicOnly ? 'edition-item--active' : ''}`;
-
-  const arabicInfo = document.createElement('div');
-  arabicInfo.className = 'edition-item__info';
-
-  const arabicName = document.createElement('span');
-  arabicName.className = 'edition-item__name';
-  arabicName.textContent = browser.i18n.getMessage('arabicOnly') || 'Arabic Only (No Translation)';
-
-  const arabicSub = document.createElement('span');
-  arabicSub.className = 'edition-item__sub';
-  arabicSub.textContent =
-    browser.i18n.getMessage('arabicOnlyDesc') || 'Display original Quranic recitation only';
-
-  arabicInfo.appendChild(arabicName);
-  arabicInfo.appendChild(arabicSub);
-
-  const arabicAction = document.createElement('div');
-  arabicAction.className = 'edition-item__action';
-
-  const arabicRadio = document.createElement('input');
-  arabicRadio.type = 'radio';
-  arabicRadio.name = 'quran-translation-selection';
-  arabicRadio.value = 'none';
-  arabicRadio.checked = isArabicOnly;
-  arabicRadio.setAttribute('aria-label', arabicName.textContent);
-
-  arabicRadio.addEventListener('change', async () => {
-    if (arabicRadio.checked) {
-      await selectTranslation(null);
-    }
-  });
-
-  arabicOnlyItem.addEventListener('click', async (e) => {
-    if ((e.target as HTMLElement).tagName.toLowerCase() === 'input') return;
-    await selectTranslation(null);
-  });
-
-  arabicAction.appendChild(arabicRadio);
-  arabicOnlyItem.appendChild(arabicInfo);
-  arabicOnlyItem.appendChild(arabicAction);
-  editionsListEl.appendChild(arabicOnlyItem);
+  const noTransOpt = document.createElement('option');
+  noTransOpt.value = 'none';
+  noTransOpt.textContent = browser.i18n.getMessage('noTranslation') || 'No Translation';
+  translationSelectEl.appendChild(noTransOpt);
 
   const translationEditions = CURATED_EDITIONS.filter((e) => e.type === 'translation');
-
   for (const edition of translationEditions) {
-    const isSelected = activeTransId === edition.identifier;
+    if (cachedIds.has(edition.identifier)) {
+      const opt = document.createElement('option');
+      opt.value = edition.identifier;
+      opt.textContent = edition.nativeName;
+      translationSelectEl.appendChild(opt);
+    }
+  }
+
+  const downloadMoreOpt = document.createElement('option');
+  downloadMoreOpt.value = '__settings__';
+  downloadMoreOpt.textContent =
+    browser.i18n.getMessage('downloadMore') || '+ Download Languages...';
+  translationSelectEl.appendChild(downloadMoreOpt);
+
+  if (activeTransId && cachedIds.has(activeTransId)) {
+    translationSelectEl.value = activeTransId;
+  } else {
+    translationSelectEl.value = 'none';
+  }
+}
+
+async function updateToolbarControls(): Promise<void> {
+  const showArabic = currentUserPreferences.showArabic ?? true;
+  toggleArabicBtn.className = showArabic ? 'pill-btn pill-btn--active' : 'pill-btn';
+  toggleArabicBtn.setAttribute('aria-pressed', showArabic ? 'true' : 'false');
+
+  const translitId = currentUserPreferences.activeTransliterationId;
+  const isDownloadingTranslit = downloadingEditions.has(translitId);
+  const showTranslit = currentUserPreferences.showTransliteration;
+
+  if (isDownloadingTranslit) {
+    toggleTranslitBtn.className = 'pill-btn pill-btn--loading';
+  } else {
+    toggleTranslitBtn.className = showTranslit ? 'pill-btn pill-btn--active' : 'pill-btn';
+  }
+  toggleTranslitBtn.setAttribute('aria-pressed', showTranslit ? 'true' : 'false');
+
+  await populateTranslationSelect();
+}
+
+async function onArabicToggle(): Promise<void> {
+  const currentShow = currentUserPreferences.showArabic ?? true;
+  const nextShow = !currentShow;
+
+  // Safeguard: do not allow turning off Arabic if no translation and no transliteration
+  if (
+    !nextShow &&
+    !currentUserPreferences.activeTranslationId &&
+    !currentUserPreferences.showTransliteration
+  ) {
+    return;
+  }
+
+  currentUserPreferences = {
+    ...currentUserPreferences,
+    showArabic: nextShow,
+  };
+
+  await userPreferencesItem.setValue(currentUserPreferences);
+  await updateToolbarControls();
+  renderedAyahKey = '';
+  renderAyah(currentMatchedAyah);
+}
+
+async function onTranslitToggle(): Promise<void> {
+  await handleTransliterationToggle(!currentUserPreferences.showTransliteration);
+}
+
+async function onTranslationChange(): Promise<void> {
+  const value = translationSelectEl.value;
+  if (value === '__settings__') {
+    translationSelectEl.value = currentUserPreferences.activeTranslationId ?? 'none';
+    onSettingsOpen();
+    return;
+  }
+
+  const newId = value === 'none' ? null : value;
+  await selectTranslation(newId);
+}
+
+async function renderSettings(): Promise<void> {
+  const cachedIds = new Set(await getCachedEditionIds());
+  editionsListEl.innerHTML = '';
+
+  for (const edition of CURATED_EDITIONS) {
     const isDownloading = downloadingEditions.has(edition.identifier);
     const isCached = cachedIds.has(edition.identifier);
 
     const item = document.createElement('div');
-    item.className = `edition-item ${isSelected ? 'edition-item--active' : ''}`;
+    item.className = 'edition-item';
 
     const info = document.createElement('div');
     info.className = 'edition-item__info';
 
     const name = document.createElement('span');
     name.className = 'edition-item__name';
-    name.textContent = edition.englishName;
+    name.textContent = edition.nativeName;
 
     const sub = document.createElement('span');
     sub.className = 'edition-item__sub';
 
     const langTag = document.createElement('span');
     langTag.className = 'edition-item__lang-tag';
-    langTag.textContent = edition.language.toUpperCase();
+    langTag.textContent =
+      edition.type === 'transliteration' ? 'Aa' : edition.language.toUpperCase();
 
-    const authorText = document.createTextNode(edition.name);
+    const detailText = document.createTextNode(
+      edition.type === 'transliteration'
+        ? (browser.i18n.getMessage('phoneticScript') ?? 'Phonetic Latin script')
+        : `${edition.name} · ${edition.englishName}`,
+    );
 
     sub.appendChild(langTag);
-    sub.appendChild(authorText);
+    sub.appendChild(detailText);
 
     info.appendChild(name);
     info.appendChild(sub);
@@ -526,28 +562,21 @@ async function renderSettings(): Promise<void> {
       badge.textContent = `✓ ${browser.i18n.getMessage('downloaded') || 'Downloaded'}`;
       action.appendChild(badge);
 
-      const radio = document.createElement('input');
-      radio.type = 'radio';
-      radio.name = 'quran-translation-selection';
-      radio.value = edition.identifier;
-      radio.checked = isSelected;
-      radio.setAttribute(
+      const btnRemove = document.createElement('button');
+      btnRemove.type = 'button';
+      btnRemove.className = 'btn-remove';
+      btnRemove.textContent = browser.i18n.getMessage('remove') || 'Remove';
+      btnRemove.setAttribute(
         'aria-label',
-        `Select ${edition.englishName} (${edition.language}) translation`,
+        `Remove ${edition.nativeName} (${edition.language}) download`,
       );
 
-      radio.addEventListener('change', async () => {
-        if (radio.checked) {
-          await selectTranslation(edition.identifier);
-        }
+      btnRemove.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        await removeEdition(edition.identifier);
       });
 
-      action.appendChild(radio);
-
-      item.addEventListener('click', async (e) => {
-        if ((e.target as HTMLElement).tagName.toLowerCase() === 'input') return;
-        await selectTranslation(edition.identifier);
-      });
+      action.appendChild(btnRemove);
     } else {
       const isOffline = typeof navigator !== 'undefined' && navigator.onLine === false;
       if (isOffline) {
@@ -565,12 +594,12 @@ async function renderSettings(): Promise<void> {
         btnDownload.textContent = `${dlText} (${sizeText})`;
         btnDownload.setAttribute(
           'aria-label',
-          `Download and select ${edition.englishName} (${edition.language}) translation`,
+          `Download ${edition.nativeName} (${edition.language})`,
         );
 
         btnDownload.addEventListener('click', async (e) => {
           e.stopPropagation();
-          await downloadAndSelectTranslation(edition.identifier);
+          await downloadEdition(edition.identifier);
         });
 
         action.appendChild(btnDownload);
@@ -584,8 +613,14 @@ async function renderSettings(): Promise<void> {
 }
 
 async function selectTranslation(id: string | null): Promise<void> {
+  let nextShowArabic = currentUserPreferences.showArabic ?? true;
+  if (!id && !currentUserPreferences.showTransliteration && !nextShowArabic) {
+    nextShowArabic = true;
+  }
+
   currentUserPreferences = {
     ...currentUserPreferences,
+    showArabic: nextShowArabic,
     activeTranslationId: id,
     activeTranslationIds: id ? [id] : [],
   };
@@ -607,34 +642,92 @@ async function selectTranslation(id: string | null): Promise<void> {
   await userPreferencesItem.setValue(currentUserPreferences);
   renderedAyahKey = '';
   renderAyah(currentMatchedAyah);
+  await updateToolbarControls();
   await renderSettings();
 }
 
-async function downloadAndSelectTranslation(id: string): Promise<void> {
+async function downloadEdition(id: string): Promise<void> {
   downloadingEditions.add(id);
+  await updateToolbarControls();
   await renderSettings();
 
   try {
     const downloaded = await fetchAndCacheEdition(id);
     activeEditions.set(id, downloaded);
-    await selectTranslation(id);
+
+    const editionMeta = CURATED_EDITIONS.find((e) => e.identifier === id);
+    if (editionMeta?.type === 'translation') {
+      if (!currentUserPreferences.activeTranslationId) {
+        await selectTranslation(id);
+      }
+    } else if (editionMeta?.type === 'transliteration') {
+      if (currentUserPreferences.showTransliteration) {
+        renderedAyahKey = '';
+        renderAyah(currentMatchedAyah);
+      }
+    }
   } catch (err) {
     console.error(`Failed to download edition ${id}:`, err);
   } finally {
     downloadingEditions.delete(id);
+    await updateToolbarControls();
     await renderSettings();
   }
 }
 
+async function removeEdition(id: string): Promise<void> {
+  try {
+    await deleteCachedEdition(id);
+    activeEditions.delete(id);
+
+    let nextShowArabic = currentUserPreferences.showArabic ?? true;
+    let nextActiveTransId = currentUserPreferences.activeTranslationId;
+    let nextShowTranslit = currentUserPreferences.showTransliteration;
+
+    if (nextActiveTransId === id) {
+      nextActiveTransId = null;
+    }
+    if (currentUserPreferences.activeTransliterationId === id) {
+      nextShowTranslit = false;
+    }
+    if (!nextActiveTransId && !nextShowTranslit && !nextShowArabic) {
+      nextShowArabic = true;
+    }
+
+    currentUserPreferences = {
+      ...currentUserPreferences,
+      showArabic: nextShowArabic,
+      activeTranslationId: nextActiveTransId,
+      activeTranslationIds: nextActiveTransId ? [nextActiveTransId] : [],
+      showTransliteration: nextShowTranslit,
+    };
+
+    await userPreferencesItem.setValue(currentUserPreferences);
+    renderedAyahKey = '';
+    renderAyah(currentMatchedAyah);
+    await updateToolbarControls();
+    await renderSettings();
+  } catch (err) {
+    console.error(`Failed to remove edition ${id}:`, err);
+  }
+}
+
 async function handleTransliterationToggle(enable: boolean): Promise<void> {
+  let nextShowArabic = currentUserPreferences.showArabic ?? true;
+  if (!enable && !currentUserPreferences.activeTranslationId && !nextShowArabic) {
+    nextShowArabic = true;
+  }
+
   currentUserPreferences = {
     ...currentUserPreferences,
+    showArabic: nextShowArabic,
     showTransliteration: enable,
   };
 
   const translitId = currentUserPreferences.activeTransliterationId;
   if (enable && !activeEditions.has(translitId)) {
     downloadingEditions.add(translitId);
+    await updateToolbarControls();
     await renderSettings();
 
     try {
@@ -644,6 +737,7 @@ async function handleTransliterationToggle(enable: boolean): Promise<void> {
       console.error('Failed to download transliteration edition:', err);
     } finally {
       downloadingEditions.delete(translitId);
+      await updateToolbarControls();
       await renderSettings();
     }
   }
@@ -651,6 +745,7 @@ async function handleTransliterationToggle(enable: boolean): Promise<void> {
   await userPreferencesItem.setValue(currentUserPreferences);
   renderedAyahKey = '';
   renderAyah(currentMatchedAyah);
+  await updateToolbarControls();
   await renderSettings();
 }
 
@@ -669,13 +764,10 @@ function onDialogClick(e: MouseEvent): void {
   }
 }
 
-async function onTransliterationChange(): Promise<void> {
-  await handleTransliterationToggle(toggleTransliterationInput.checked);
-}
-
 async function onOnline(): Promise<void> {
   activeEditions = await loadActiveEditions(currentUserPreferences);
   renderAyah(currentMatchedAyah);
+  await updateToolbarControls();
   await renderSettings();
 }
 
@@ -686,10 +778,12 @@ async function init(): Promise<void> {
 
   // Attach event listeners immediately before any asynchronous boundary
   toggleBtn.addEventListener('click', handleToggle);
+  toggleArabicBtn.addEventListener('click', onArabicToggle);
+  toggleTranslitBtn.addEventListener('click', onTranslitToggle);
+  translationSelectEl.addEventListener('change', onTranslationChange);
   settingsBtn.addEventListener('click', onSettingsOpen);
   settingsCloseBtn.addEventListener('click', onSettingsClose);
   settingsDialog.addEventListener('click', onDialogClick);
-  toggleTransliterationInput.addEventListener('change', onTransliterationChange);
   window.addEventListener('online', onOnline);
   window.addEventListener('beforeunload', cleanup);
 
@@ -697,7 +791,6 @@ async function init(): Promise<void> {
     const s = newState ?? CaptureState.IDLE;
     updateUI(s);
     renderAyah(currentMatchedAyah);
-    renderTranscript(currentTranscript);
   });
 
   unwatchMatchedAyah = matchedAyahItem.watch((newAyah: MatchedAyah | null) => {
@@ -705,13 +798,14 @@ async function init(): Promise<void> {
   });
 
   unwatchTranscript = transcriptItem.watch((newTranscript: string | null) => {
-    renderTranscript(newTranscript ?? '');
+    handleTranscriptError(newTranscript ?? '');
   });
 
   unwatchPreferences = userPreferencesItem.watch((prefs: UserEditionPreferences | null) => {
     if (prefs) {
       currentUserPreferences = {
         ...prefs,
+        showArabic: prefs.showArabic ?? true,
         activeTranslationId:
           prefs.activeTranslationId !== undefined
             ? prefs.activeTranslationId
@@ -720,6 +814,7 @@ async function init(): Promise<void> {
       loadActiveEditions(currentUserPreferences).then((editions) => {
         activeEditions = editions;
         renderAyah(currentMatchedAyah);
+        void updateToolbarControls();
         void renderSettings();
       });
     }
@@ -747,10 +842,12 @@ function cleanup(): void {
   }
 
   toggleBtn?.removeEventListener('click', handleToggle);
+  toggleArabicBtn?.removeEventListener('click', onArabicToggle);
+  toggleTranslitBtn?.removeEventListener('click', onTranslitToggle);
+  translationSelectEl?.removeEventListener('change', onTranslationChange);
   settingsBtn?.removeEventListener('click', onSettingsOpen);
   settingsCloseBtn?.removeEventListener('click', onSettingsClose);
   settingsDialog?.removeEventListener('click', onDialogClick);
-  toggleTransliterationInput?.removeEventListener('change', onTransliterationChange);
   window.removeEventListener('online', onOnline);
   window.removeEventListener('beforeunload', cleanup);
 }

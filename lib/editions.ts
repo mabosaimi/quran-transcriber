@@ -7,6 +7,7 @@ export interface StoredEdition {
   name: string;
   englishName: string;
   language: string;
+  nativeName?: string;
   type: 'translation' | 'transliteration';
   direction: 'ltr' | 'rtl';
   ayahs: string[];
@@ -17,8 +18,25 @@ export interface EditionMetadata {
   name: string;
   englishName: string;
   language: string;
+  nativeName: string;
   type: 'translation' | 'transliteration';
   direction: 'ltr' | 'rtl';
+}
+
+export const LANGUAGE_ENDONYMS: Readonly<Record<string, string>> = {
+  ar: 'العربية',
+  en: 'English',
+  fr: 'Français',
+  ur: 'اردو',
+  id: 'Bahasa Indonesia',
+  tr: 'Türkçe',
+  de: 'Deutsch',
+  es: 'Español',
+  ru: 'Русский',
+};
+
+export function getLanguageEndonym(languageCode: string): string {
+  return LANGUAGE_ENDONYMS[languageCode] ?? languageCode.toUpperCase();
 }
 
 export const CURATED_EDITIONS: readonly EditionMetadata[] = [
@@ -27,6 +45,7 @@ export const CURATED_EDITIONS: readonly EditionMetadata[] = [
     name: 'Saheeh International',
     englishName: 'Saheeh International',
     language: 'en',
+    nativeName: 'English',
     type: 'translation',
     direction: 'ltr',
   },
@@ -35,6 +54,7 @@ export const CURATED_EDITIONS: readonly EditionMetadata[] = [
     name: 'Transliteration',
     englishName: 'English Transliteration',
     language: 'en',
+    nativeName: 'Transliteration',
     type: 'transliteration',
     direction: 'ltr',
   },
@@ -43,6 +63,7 @@ export const CURATED_EDITIONS: readonly EditionMetadata[] = [
     name: 'Hamidullah',
     englishName: 'Muhammad Hamidullah',
     language: 'fr',
+    nativeName: 'Français',
     type: 'translation',
     direction: 'ltr',
   },
@@ -51,6 +72,7 @@ export const CURATED_EDITIONS: readonly EditionMetadata[] = [
     name: 'جالندہری',
     englishName: 'Fateh Muhammad Jalandhry',
     language: 'ur',
+    nativeName: 'اردو',
     type: 'translation',
     direction: 'rtl',
   },
@@ -59,6 +81,7 @@ export const CURATED_EDITIONS: readonly EditionMetadata[] = [
     name: 'Bahasa Indonesia',
     englishName: 'Indonesian Ministry of Religious Affairs',
     language: 'id',
+    nativeName: 'Bahasa Indonesia',
     type: 'translation',
     direction: 'ltr',
   },
@@ -67,6 +90,7 @@ export const CURATED_EDITIONS: readonly EditionMetadata[] = [
     name: 'Diyanet İşleri',
     englishName: 'Diyanet Isleri',
     language: 'tr',
+    nativeName: 'Türkçe',
     type: 'translation',
     direction: 'ltr',
   },
@@ -75,6 +99,7 @@ export const CURATED_EDITIONS: readonly EditionMetadata[] = [
     name: 'Bubenheim & Elyas',
     englishName: 'A. S. F. Bubenheim and N. Elyas',
     language: 'de',
+    nativeName: 'Deutsch',
     type: 'translation',
     direction: 'ltr',
   },
@@ -83,6 +108,7 @@ export const CURATED_EDITIONS: readonly EditionMetadata[] = [
     name: 'Cortes',
     englishName: 'Julio Cortes',
     language: 'es',
+    nativeName: 'Español',
     type: 'translation',
     direction: 'ltr',
   },
@@ -91,6 +117,7 @@ export const CURATED_EDITIONS: readonly EditionMetadata[] = [
     name: 'Кулиев',
     englishName: 'Elmir Kuliev',
     language: 'ru',
+    nativeName: 'Русский',
     type: 'translation',
     direction: 'ltr',
   },
@@ -207,6 +234,7 @@ export function validateAndFlattenEdition(payload: unknown): StoredEdition {
     name: edition.name ?? edition.identifier,
     englishName: edition.englishName ?? edition.identifier,
     language: edition.language ?? 'en',
+    nativeName: getLanguageEndonym(edition.language ?? 'en'),
     type,
     direction,
     ayahs,

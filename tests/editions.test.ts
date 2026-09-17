@@ -7,6 +7,7 @@ import {
   fetchAndCacheEdition,
   getCachedEdition,
   getCachedEditionIds,
+  getLanguageEndonym,
   loadActiveEditions,
   validateAndFlattenEdition,
 } from '@/lib/editions';
@@ -61,6 +62,31 @@ describe('lib/editions', () => {
 
       const english = CURATED_EDITIONS.find((e) => e.identifier === 'en.sahih');
       expect(english?.direction).toBe('ltr');
+    });
+
+    it('provides native endonyms for all curated languages', () => {
+      const french = CURATED_EDITIONS.find((e) => e.identifier === 'fr.hamidullah');
+      expect(french?.nativeName).toBe('Français');
+
+      const urdu = CURATED_EDITIONS.find((e) => e.identifier === 'ur.jalandhry');
+      expect(urdu?.nativeName).toBe('اردو');
+
+      const turkish = CURATED_EDITIONS.find((e) => e.identifier === 'tr.diyanet');
+      expect(turkish?.nativeName).toBe('Türkçe');
+    });
+  });
+
+  describe('getLanguageEndonym', () => {
+    it('returns native language names for supported codes', () => {
+      expect(getLanguageEndonym('ar')).toBe('العربية');
+      expect(getLanguageEndonym('fr')).toBe('Français');
+      expect(getLanguageEndonym('ur')).toBe('اردو');
+      expect(getLanguageEndonym('id')).toBe('Bahasa Indonesia');
+      expect(getLanguageEndonym('ru')).toBe('Русский');
+    });
+
+    it('falls back to uppercase code for unknown languages', () => {
+      expect(getLanguageEndonym('zh')).toBe('ZH');
     });
   });
 

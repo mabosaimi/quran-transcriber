@@ -98,5 +98,45 @@
   "approxSize": {
     "message": "~1.2 ميغابايت",
     "description": "الحجم التقريبي لملف الترجمة"
+  },
+  "manageLanguages": {
+    "message": "إدارة اللغات والترجمات",
+    "description": "عنوان نافذة إعدادات إدارة اللغات"
+  },
+  "availableLanguages": {
+    "message": "اللغات المتاحة",
+    "description": "عنوان قائمة اللغات المتاحة"
+  },
+  "downloadHint": {
+    "message": "قم بتنزيل الترجمات للاستخدام بدون اتصال. بعد التنزيل، يمكنك اختيارها مباشرة من شريط الأدوات.",
+    "description": "تلميح في نافذة الإعدادات"
+  },
+  "noTranslation": {
+    "message": "بدون ترجمة",
+    "description": "خيار في قائمة الترجمات عند عدم تفعيل ترجمة"
+  },
+  "remove": {
+    "message": "حذف",
+    "description": "زر حذف ملف الترجمة المنزّل"
+  },
+  "downloadMore": {
+    "message": "+ تنزيل لغات أخرى...",
+    "description": "خيار لفتح إعدادات تنزيل اللغات"
+  },
+  "arabic": {
+    "message": "العربية",
+    "description": "تسمية النص العربي"
+  },
+  "toggleArabic": {
+    "message": "تبديل عرض النص العربي",
+    "description": "تلميح زر تبديل النص العربي"
+  },
+  "toggleTransliteration": {
+    "message": "تبديل عرض الحرفية (النقحرة)",
+    "description": "تلميح زر تبديل الحرفية"
+  },
+  "phoneticScript": {
+    "message": "نطق الكلمات بالأحرف اللاتينية",
+    "description": "وصف طبعة الحرفية"
   }
 }

@@ -98,5 +98,45 @@
   "approxSize": {
     "message": "~1.2 MB",
     "description": "Approximate file size of an edition download"
+  },
+  "manageLanguages": {
+    "message": "Manage Languages",
+    "description": "Title of settings dialog for managing languages"
+  },
+  "availableLanguages": {
+    "message": "Available Languages",
+    "description": "Header for list of available languages"
+  },
+  "downloadHint": {
+    "message": "Download translations for offline use. Once downloaded, choose them directly from the toolbar.",
+    "description": "Hint in settings dialog explaining download workflow"
+  },
+  "noTranslation": {
+    "message": "No Translation",
+    "description": "Option in translation select when no translation is active"
+  },
+  "remove": {
+    "message": "Remove",
+    "description": "Button label to remove a downloaded edition"
+  },
+  "downloadMore": {
+    "message": "+ Download Languages...",
+    "description": "Option in translation select to open download settings"
+  },
+  "arabic": {
+    "message": "Arabic",
+    "description": "Label for Arabic text"
+  },
+  "toggleArabic": {
+    "message": "Toggle Arabic text",
+    "description": "Tooltip for Arabic toggle button"
+  },
+  "toggleTransliteration": {
+    "message": "Toggle transliteration",
+    "description": "Tooltip for Transliteration toggle button"
+  },
+  "phoneticScript": {
+    "message": "Phonetic Latin script",
+    "description": "Description for transliteration edition"
   }
 }
