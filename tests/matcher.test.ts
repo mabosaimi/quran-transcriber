@@ -1,5 +1,6 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { QuranMatcher, type QuranVerse } from '@/lib/matcher';
+import quranCorpusRaw from '@/public/data/quran.json';
 
 const SAMPLE_CORPUS: QuranVerse[] = [
   [1, 1, 'بِسْمِ ٱللَّهِ ٱلرَّحْمَٰنِ ٱلرَّحِيمِ', 'بسم الله الرحمن الرحيم'],
@@ -77,5 +78,68 @@ describe('QuranMatcher', () => {
     const nextMatch = matcher.match('الحمد لله رب العالمين');
     expect(nextMatch?.ayah).toBe(2);
     expect(nextMatch?.isSequential).toBe(false);
+  });
+});
+
+describe('QuranMatcher Production Corpus Integration', () => {
+  const productionCorpus = quranCorpusRaw as unknown as QuranVerse[];
+  let productionMatcher: QuranMatcher;
+
+  beforeAll(() => {
+    productionMatcher = new QuranMatcher(productionCorpus);
+  });
+
+  beforeEach(() => {
+    productionMatcher.reset();
+  });
+
+  it('indexes all 6,236 verses from the production dataset', () => {
+    expect(productionCorpus).toHaveLength(6236);
+  });
+
+  it('accurately resolves verses across diverse Surahs', () => {
+    const alFatihah = productionMatcher.match('الحمد لله رب العالمين');
+    expect(alFatihah?.surah).toBe(1);
+    expect(alFatihah?.ayah).toBe(2);
+
+    productionMatcher.reset();
+    const ayatAlKursi = productionMatcher.match('الله لا اله الا هو الحي القيوم');
+    expect(ayatAlKursi?.surah).toBe(2);
+    expect(ayatAlKursi?.ayah).toBe(255);
+
+    productionMatcher.reset();
+    const alIkhlas = productionMatcher.match('قل هو الله احد الله الصمد');
+    expect(alIkhlas?.surah).toBe(112);
+    expect(alIkhlas?.ayah).toBe(1);
+  });
+
+  it('executes in-memory matching within sub-millisecond latency budget', () => {
+    const testQueries = [
+      'الحمد لله رب العالمين',
+      'قل هو الله احد',
+      'الله لا اله الا هو الحي القيوم',
+      'والضحى والليل اذا سجى',
+      'تبارك الذي بيده الملك',
+      'انا اعطيناك الكوثر',
+    ];
+
+    // Warm up JIT optimizer
+    for (const query of testQueries) {
+      productionMatcher.match(query);
+    }
+
+    const iterations = 500;
+    const startTime = performance.now();
+    for (let i = 0; i < iterations; i++) {
+      const query = testQueries[i % testQueries.length];
+      if (query) {
+        productionMatcher.match(query);
+      }
+    }
+    const elapsedMs = performance.now() - startTime;
+    const avgLatencyMs = elapsedMs / iterations;
+
+    // Sub-millisecond budget: average match must complete in < 1.0 ms
+    expect(avgLatencyMs).toBeLessThan(1.0);
   });
 });

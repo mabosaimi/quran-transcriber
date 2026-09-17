@@ -3,7 +3,11 @@
   "version": "0.1.0",
   "description": "Follow along with Quran recitations via real-time Arabic speech recognition",
   "private": true,
+  "license": "MIT",
   "type": "module",
+  "engines": {
+    "node": ">=20.0.0"
+  },
   "packageManager": "pnpm@12.4.2",
   "scripts": {
     "dev": "wxt",

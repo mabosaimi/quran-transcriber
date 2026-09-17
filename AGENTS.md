@@ -1,4 +1,4 @@
-# AGENTS.md — Development Guidelines & Invariants
+# AGENTS.md - Development Guidelines & Invariants
 
 > Operational directives and architecture invariants for AI agents working in `quran-transcriber`. Keep this file aligned with the codebase.
 
@@ -89,7 +89,7 @@ if (audioContext.state === 'suspended') void audioContext.resume();
 | `entrypoints/background/` | MV3 Service worker | State machine (`idle → starting → capturing → stopping → idle`), tabCapture orchestration, message routing |
 | `entrypoints/offscreen/` | Audio processing | Web Audio loopback, continuous Blink SpeechRecognition, exponential backoff reconnection |
 | `entrypoints/sidepanel/` | User interface | Display bar (`[عربي]`, `[Aa]`, native select), ayah card, settings modal download manager |
-| `lib/matcher.ts` | Retrieval engine | In-memory token-based verse matching (<10ms across 6,236 Ayahs) |
+| `lib/matcher.ts` | Retrieval engine | In-memory token-based verse matching (sub-millisecond across 6,236 Ayahs) |
 | `lib/normalize.ts` | Arabic NLP | Tashkeel removal, alef normalization, character collapsing |
 | `lib/quran-meta.ts` | Corpus metadata | 114 Surahs catalog, ayah counts, Sajdah verses |
 | `lib/editions.ts` | Multilingual layer | Curated editions catalog, AlQuran Cloud API client, IndexedDB caching |
