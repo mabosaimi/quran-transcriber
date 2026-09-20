@@ -39,6 +39,33 @@ export function getLanguageEndonym(languageCode: string): string {
   return LANGUAGE_ENDONYMS[languageCode] ?? languageCode.toUpperCase();
 }
 
+export function formatEditionAuthors(name: string, englishName: string): string {
+  if (!name) return englishName || '';
+  if (!englishName || name === englishName) return name;
+
+  const getSignificantWords = (str: string) =>
+    str
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^\p{L}\p{N}]+/gu, ' ')
+      .split(' ')
+      .filter((w) => w.length >= 3);
+
+  const words1 = getSignificantWords(name);
+  const words2 = getSignificantWords(englishName);
+
+  if (words1.length > 0 && words2.length > 0) {
+    const isSubset1 = words1.every((w) => words2.includes(w));
+    const isSubset2 = words2.every((w) => words1.includes(w));
+    if (isSubset1 || isSubset2) {
+      return englishName.length > name.length ? englishName : name;
+    }
+  }
+
+  return `${name} · ${englishName}`;
+}
+
 export const CURATED_EDITIONS: readonly EditionMetadata[] = [
   {
     identifier: 'en.sahih',
@@ -54,7 +81,7 @@ export const CURATED_EDITIONS: readonly EditionMetadata[] = [
     name: 'Transliteration',
     englishName: 'English Transliteration',
     language: 'en',
-    nativeName: 'Transliteration',
+    nativeName: 'English',
     type: 'transliteration',
     direction: 'ltr',
   },
@@ -121,7 +148,50 @@ export const CURATED_EDITIONS: readonly EditionMetadata[] = [
     type: 'translation',
     direction: 'ltr',
   },
+  {
+    identifier: 'tr.transliteration',
+    name: 'Çeviriyazı',
+    englishName: 'Muhammet Abay',
+    language: 'tr',
+    nativeName: 'Türkçe',
+    type: 'transliteration',
+    direction: 'ltr',
+  },
+  {
+    identifier: 'ru.transliteration',
+    name: 'Транскрипция',
+    englishName: 'Russian Transliteration',
+    language: 'ru',
+    nativeName: 'Русский',
+    type: 'transliteration',
+    direction: 'ltr',
+  },
 ];
+
+export const DEFAULT_TRANSLITERATION_ID = 'en.transliteration';
+
+export function getAvailableTranslations(): readonly EditionMetadata[] {
+  return CURATED_EDITIONS.filter((e) => e.type === 'translation');
+}
+
+export function getAvailableTransliterations(): readonly EditionMetadata[] {
+  return CURATED_EDITIONS.filter((e) => e.type === 'transliteration');
+}
+
+export function resolveTransliterationForLanguage(languageCode: string): EditionMetadata {
+  const match = CURATED_EDITIONS.find(
+    (e) => e.type === 'transliteration' && e.language === languageCode,
+  );
+  if (match) return match;
+
+  const fallback = CURATED_EDITIONS.find((e) => e.identifier === DEFAULT_TRANSLITERATION_ID);
+  if (fallback) return fallback;
+
+  const first = CURATED_EDITIONS.find((e) => e.type === 'transliteration');
+  if (first) return first;
+
+  throw new Error('No transliteration editions available in catalog');
+}
 
 const TOTAL_QURAN_AYAHS = 6236;
 const CACHE_PREFIX = 'edition:';
@@ -169,6 +239,26 @@ interface RawApiResponse {
     surahs?: RawSurah[];
     edition?: RawEditionData;
   };
+}
+
+const RTL_LANGUAGES = new Set(['ar', 'ur', 'fa', 'he', 'ps', 'sd', 'ug']);
+
+export function resolveEditionDirection(
+  identifier?: string,
+  language?: string,
+  direction?: string,
+): 'ltr' | 'rtl' {
+  if (direction === 'rtl') return 'rtl';
+  if (direction === 'ltr') return 'ltr';
+  if (identifier) {
+    const curated = CURATED_EDITIONS.find((e) => e.identifier === identifier);
+    if (curated) return curated.direction;
+  }
+  const lang = language?.toLowerCase();
+  if (lang && RTL_LANGUAGES.has(lang)) {
+    return 'rtl';
+  }
+  return 'ltr';
 }
 
 export function validateAndFlattenEdition(payload: unknown): StoredEdition {
@@ -226,8 +316,14 @@ export function validateAndFlattenEdition(payload: unknown): StoredEdition {
     );
   }
 
-  const type = edition.type === 'transliteration' ? 'transliteration' : 'translation';
-  const direction = edition.direction === 'rtl' ? 'rtl' : 'ltr';
+  const curated = CURATED_EDITIONS.find((e) => e.identifier === edition.identifier);
+  const type =
+    edition.type === 'transliteration' ? 'transliteration' : (curated?.type ?? 'translation');
+  const direction = resolveEditionDirection(
+    edition.identifier,
+    edition.language,
+    edition.direction,
+  );
 
   return {
     identifier: edition.identifier,
@@ -242,7 +338,19 @@ export function validateAndFlattenEdition(payload: unknown): StoredEdition {
 }
 
 export async function getCachedEdition(id: string): Promise<StoredEdition | undefined> {
-  return await get<StoredEdition>(`${CACHE_PREFIX}${id}`);
+  const cached = await get<StoredEdition>(`${CACHE_PREFIX}${id}`);
+  if (!cached) return undefined;
+  const expectedDirection = resolveEditionDirection(
+    cached.identifier,
+    cached.language,
+    cached.direction === 'rtl' ? 'rtl' : undefined,
+  );
+  if (cached.direction !== expectedDirection) {
+    const healed: StoredEdition = { ...cached, direction: expectedDirection };
+    set(`${CACHE_PREFIX}${id}`, healed).catch(() => {});
+    return healed;
+  }
+  return cached;
 }
 
 export async function getCachedEditionIds(): Promise<string[]> {

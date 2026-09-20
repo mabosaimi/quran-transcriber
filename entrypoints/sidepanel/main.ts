@@ -1,15 +1,22 @@
 import {
   CURATED_EDITIONS,
+  DEFAULT_TRANSLITERATION_ID,
   deleteCachedEdition,
+  type EditionMetadata,
   fetchAndCacheEdition,
+  formatEditionAuthors,
+  getAvailableTranslations,
+  getAvailableTransliterations,
   getCachedEdition,
   getCachedEditionIds,
   getLanguageEndonym,
   loadActiveEditions,
+  resolveEditionDirection,
+  resolveTransliterationForLanguage,
   type StoredEdition,
 } from '@/lib/editions';
 import { type CaptureResponseMessage, MSG } from '@/lib/messages';
-import { isSajdah } from '@/lib/quran-meta';
+import { isSajdah, toArabicNumerals } from '@/lib/quran-meta';
 import {
   CaptureState,
   type CaptureStateValue,
@@ -52,7 +59,6 @@ let editionsListEl: HTMLElement;
 let currentCaptureState: CaptureStateValue = CaptureState.IDLE;
 let currentMatchedAyah: MatchedAyah | null = null;
 let renderedAyahKey = '';
-let currentTranscript = '';
 let isToggling = false;
 let activeTabRequired = false;
 
@@ -62,7 +68,7 @@ let currentUserPreferences: UserEditionPreferences = {
   activeTranslationId: null,
   activeTranslationIds: [],
   showTransliteration: false,
-  activeTransliterationId: 'en.transliteration',
+  activeTransliterationId: DEFAULT_TRANSLITERATION_ID,
 };
 const downloadingEditions = new Set<string>();
 
@@ -187,7 +193,6 @@ async function hydrateState(): Promise<void> {
   ]);
 
   currentCaptureState = state;
-  currentTranscript = transcript ?? '';
   currentMatchedAyah = matchedAyah ?? null;
   if (prefs) {
     currentUserPreferences = {
@@ -201,12 +206,10 @@ async function hydrateState(): Promise<void> {
   }
 
   updateUI(state);
+  activeEditions = await loadActiveEditions(currentUserPreferences);
   await updateToolbarControls();
   renderAyah(currentMatchedAyah);
-  handleTranscriptError(currentTranscript);
-
-  activeEditions = await loadActiveEditions(currentUserPreferences);
-  renderAyah(currentMatchedAyah);
+  handleTranscriptError(transcript ?? '');
 }
 
 async function handleToggle(): Promise<void> {
@@ -292,6 +295,22 @@ function updateUI(state: CaptureStateValue): void {
   statusEl.className = `status status--${state}`;
 }
 
+function createAyahNumberPill(ayahNumber: number, direction: 'ltr' | 'rtl' = 'ltr'): HTMLElement {
+  const pill = document.createElement('span');
+  pill.className = 'ayah-inline-num';
+
+  const bdi = document.createElement('bdi');
+  bdi.setAttribute('dir', direction);
+  if (direction === 'rtl') {
+    bdi.textContent = `(${toArabicNumerals(ayahNumber)})`;
+  } else {
+    bdi.textContent = `(${ayahNumber})`;
+  }
+
+  pill.appendChild(bdi);
+  return pill;
+}
+
 function renderAyah(ayah: MatchedAyah | null): void {
   currentMatchedAyah = ayah;
   const isCardVisible = Boolean(ayah && currentCaptureState === CaptureState.CAPTURING);
@@ -340,6 +359,8 @@ function renderAyah(ayah: MatchedAyah | null): void {
         const text = translitEdition?.ayahs[ayah.index];
         if (text) {
           transliterationTextEl.textContent = text;
+          transliterationTextEl.appendChild(document.createTextNode(' '));
+          transliterationTextEl.appendChild(createAyahNumberPill(ayah.ayah, 'ltr'));
           transliterationContainerEl.hidden = false;
           transliterationContainerEl.style.borderTop = hasPrecedingContent ? '' : 'none';
           transliterationContainerEl.style.paddingTop = hasPrecedingContent ? '' : '0';
@@ -359,7 +380,12 @@ function renderAyah(ayah: MatchedAyah | null): void {
           if (text) {
             const block = document.createElement('div');
             block.className = 'ayah-translation-block';
-            block.setAttribute('dir', edition.direction);
+            const direction = resolveEditionDirection(
+              edition.identifier,
+              edition.language,
+              edition.direction,
+            );
+            block.setAttribute('dir', direction);
             if (!hasPrecedingContent) {
               block.style.borderTop = 'none';
               block.style.paddingTop = '0';
@@ -375,6 +401,8 @@ function renderAyah(ayah: MatchedAyah | null): void {
             const p = document.createElement('p');
             p.className = 'ayah-translation-text';
             p.textContent = text;
+            p.appendChild(document.createTextNode(' '));
+            p.appendChild(createAyahNumberPill(ayah.ayah, direction));
 
             block.appendChild(label);
             block.appendChild(p);
@@ -510,105 +538,169 @@ async function onTranslationChange(): Promise<void> {
   await selectTranslation(newId);
 }
 
+function createEditionItem(edition: EditionMetadata, cachedIds: Set<string>): HTMLElement {
+  const isDownloading = downloadingEditions.has(edition.identifier);
+  const isCached = cachedIds.has(edition.identifier);
+  const isActive =
+    edition.type === 'translation'
+      ? currentUserPreferences.activeTranslationId === edition.identifier
+      : currentUserPreferences.showTransliteration &&
+        currentUserPreferences.activeTransliterationId === edition.identifier;
+
+  const item = document.createElement('div');
+  item.className = isActive ? 'edition-item edition-item--active' : 'edition-item';
+
+  const header = document.createElement('div');
+  header.className = 'edition-item__header';
+
+  const name = document.createElement('span');
+  name.className = 'edition-item__name';
+  const nameBdi = document.createElement('bdi');
+  nameBdi.textContent = edition.nativeName;
+  name.appendChild(nameBdi);
+
+  const action = document.createElement('div');
+  action.className = 'edition-item__action';
+
+  if (isDownloading) {
+    const badge = document.createElement('span');
+    badge.className = 'badge badge--downloading';
+    badge.textContent = browser.i18n.getMessage('downloading') || 'Downloading...';
+    action.appendChild(badge);
+  } else if (isCached) {
+    const badge = document.createElement('span');
+    badge.className = 'badge badge--downloaded';
+    badge.textContent = `✓ ${browser.i18n.getMessage('downloaded') || 'Downloaded'}`;
+    action.appendChild(badge);
+
+    const btnRemove = document.createElement('button');
+    btnRemove.type = 'button';
+    btnRemove.className = 'btn-remove';
+    btnRemove.textContent = browser.i18n.getMessage('remove') || 'Remove';
+    btnRemove.setAttribute(
+      'aria-label',
+      `Remove ${edition.nativeName} (${edition.language}) download`,
+    );
+
+    btnRemove.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      await removeEdition(edition.identifier);
+    });
+
+    action.appendChild(btnRemove);
+  } else {
+    const isOffline = typeof navigator !== 'undefined' && navigator.onLine === false;
+    if (isOffline) {
+      const offlineNotice = document.createElement('span');
+      offlineNotice.className = 'badge badge--info';
+      offlineNotice.textContent =
+        browser.i18n.getMessage('offlineNotice') || 'Offline - connect to download';
+      action.appendChild(offlineNotice);
+    } else {
+      const btnDownload = document.createElement('button');
+      btnDownload.type = 'button';
+      btnDownload.className = 'btn-download';
+      const dlText = browser.i18n.getMessage('download') || 'Download';
+      const sizeText = browser.i18n.getMessage('approxSize') || '~1.2 MB';
+      btnDownload.textContent = `${dlText} (${sizeText})`;
+      btnDownload.setAttribute(
+        'aria-label',
+        `Download ${edition.nativeName} (${edition.language})`,
+      );
+
+      btnDownload.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        await downloadEdition(edition.identifier);
+      });
+
+      action.appendChild(btnDownload);
+    }
+  }
+
+  header.appendChild(name);
+  header.appendChild(action);
+
+  const sub = document.createElement('div');
+  sub.className = 'edition-item__sub';
+
+  const langTag = document.createElement('span');
+  langTag.className = 'edition-item__lang-tag';
+  langTag.textContent =
+    edition.type === 'transliteration'
+      ? `Aa · ${edition.language.toUpperCase()}`
+      : edition.language.toUpperCase();
+
+  const authorText = formatEditionAuthors(edition.name, edition.englishName);
+  const authorSpan = document.createElement('span');
+  authorSpan.className = 'edition-item__author';
+  authorSpan.title = authorText;
+
+  if (authorText.includes(' · ')) {
+    const [part1, part2] = authorText.split(' · ');
+    const bdi1 = document.createElement('bdi');
+    bdi1.textContent = part1 ?? '';
+    const bdi2 = document.createElement('bdi');
+    bdi2.textContent = part2 ?? '';
+    authorSpan.appendChild(bdi1);
+    authorSpan.appendChild(document.createTextNode(' · '));
+    authorSpan.appendChild(bdi2);
+  } else {
+    const bdi = document.createElement('bdi');
+    bdi.textContent = authorText;
+    authorSpan.appendChild(bdi);
+  }
+
+  sub.appendChild(langTag);
+  sub.appendChild(authorSpan);
+
+  if (isCached) {
+    item.addEventListener('click', async () => {
+      if (edition.type === 'translation') {
+        await selectTranslation(edition.identifier);
+      } else if (edition.type === 'transliteration') {
+        currentUserPreferences = {
+          ...currentUserPreferences,
+          activeTransliterationId: edition.identifier,
+          showTransliteration: true,
+        };
+        await userPreferencesItem.setValue(currentUserPreferences);
+        renderedAyahKey = '';
+        renderAyah(currentMatchedAyah);
+        await updateToolbarControls();
+        await renderSettings();
+      }
+    });
+  }
+
+  item.appendChild(header);
+  item.appendChild(sub);
+  return item;
+}
+
 async function renderSettings(): Promise<void> {
   const cachedIds = new Set(await getCachedEditionIds());
   editionsListEl.innerHTML = '';
 
-  for (const edition of CURATED_EDITIONS) {
-    const isDownloading = downloadingEditions.has(edition.identifier);
-    const isCached = cachedIds.has(edition.identifier);
+  const translations = getAvailableTranslations();
+  const transliterations = getAvailableTransliterations();
 
-    const item = document.createElement('div');
-    item.className = 'edition-item';
+  const transHeader = document.createElement('h3');
+  transHeader.className = 'settings-group-header';
+  transHeader.textContent = browser.i18n.getMessage('availableTranslations') || 'Translations';
+  editionsListEl.appendChild(transHeader);
 
-    const info = document.createElement('div');
-    info.className = 'edition-item__info';
+  for (const edition of translations) {
+    editionsListEl.appendChild(createEditionItem(edition, cachedIds));
+  }
 
-    const name = document.createElement('span');
-    name.className = 'edition-item__name';
-    name.textContent = edition.nativeName;
+  const translitHeader = document.createElement('h3');
+  translitHeader.className = 'settings-group-header';
+  translitHeader.textContent =
+    browser.i18n.getMessage('availableTransliterations') || 'Phonetic Transliterations';
+  editionsListEl.appendChild(translitHeader);
 
-    const sub = document.createElement('span');
-    sub.className = 'edition-item__sub';
-
-    const langTag = document.createElement('span');
-    langTag.className = 'edition-item__lang-tag';
-    langTag.textContent =
-      edition.type === 'transliteration' ? 'Aa' : edition.language.toUpperCase();
-
-    const detailText = document.createTextNode(
-      edition.type === 'transliteration'
-        ? (browser.i18n.getMessage('phoneticScript') ?? 'Phonetic Latin script')
-        : `${edition.name} · ${edition.englishName}`,
-    );
-
-    sub.appendChild(langTag);
-    sub.appendChild(detailText);
-
-    info.appendChild(name);
-    info.appendChild(sub);
-
-    const action = document.createElement('div');
-    action.className = 'edition-item__action';
-
-    if (isDownloading) {
-      const badge = document.createElement('span');
-      badge.className = 'badge badge--downloading';
-      badge.textContent = browser.i18n.getMessage('downloading') || 'Downloading...';
-      action.appendChild(badge);
-    } else if (isCached) {
-      const badge = document.createElement('span');
-      badge.className = 'badge badge--downloaded';
-      badge.textContent = `✓ ${browser.i18n.getMessage('downloaded') || 'Downloaded'}`;
-      action.appendChild(badge);
-
-      const btnRemove = document.createElement('button');
-      btnRemove.type = 'button';
-      btnRemove.className = 'btn-remove';
-      btnRemove.textContent = browser.i18n.getMessage('remove') || 'Remove';
-      btnRemove.setAttribute(
-        'aria-label',
-        `Remove ${edition.nativeName} (${edition.language}) download`,
-      );
-
-      btnRemove.addEventListener('click', async (e) => {
-        e.stopPropagation();
-        await removeEdition(edition.identifier);
-      });
-
-      action.appendChild(btnRemove);
-    } else {
-      const isOffline = typeof navigator !== 'undefined' && navigator.onLine === false;
-      if (isOffline) {
-        const offlineNotice = document.createElement('span');
-        offlineNotice.className = 'badge badge--info';
-        offlineNotice.textContent =
-          browser.i18n.getMessage('offlineNotice') || 'Offline - connect to download';
-        action.appendChild(offlineNotice);
-      } else {
-        const btnDownload = document.createElement('button');
-        btnDownload.type = 'button';
-        btnDownload.className = 'btn-download';
-        const dlText = browser.i18n.getMessage('download') || 'Download';
-        const sizeText = browser.i18n.getMessage('approxSize') || '~1.2 MB';
-        btnDownload.textContent = `${dlText} (${sizeText})`;
-        btnDownload.setAttribute(
-          'aria-label',
-          `Download ${edition.nativeName} (${edition.language})`,
-        );
-
-        btnDownload.addEventListener('click', async (e) => {
-          e.stopPropagation();
-          await downloadEdition(edition.identifier);
-        });
-
-        action.appendChild(btnDownload);
-      }
-    }
-
-    item.appendChild(info);
-    item.appendChild(action);
-    editionsListEl.appendChild(item);
+  for (const edition of transliterations) {
+    editionsListEl.appendChild(createEditionItem(edition, cachedIds));
   }
 }
 
@@ -618,11 +710,21 @@ async function selectTranslation(id: string | null): Promise<void> {
     nextShowArabic = true;
   }
 
+  let nextTranslitId = currentUserPreferences.activeTransliterationId;
+  if (id) {
+    const selectedEdition = CURATED_EDITIONS.find((e) => e.identifier === id);
+    if (selectedEdition) {
+      const matchingTranslit = resolveTransliterationForLanguage(selectedEdition.language);
+      nextTranslitId = matchingTranslit.identifier;
+    }
+  }
+
   currentUserPreferences = {
     ...currentUserPreferences,
     showArabic: nextShowArabic,
     activeTranslationId: id,
     activeTranslationIds: id ? [id] : [],
+    activeTransliterationId: nextTranslitId,
   };
 
   if (id && !activeEditions.has(id)) {
@@ -636,6 +738,17 @@ async function selectTranslation(id: string | null): Promise<void> {
       }
     } catch (err) {
       console.error(`Failed to load translation ${id}:`, err);
+    }
+  }
+
+  if (currentUserPreferences.showTransliteration && !activeEditions.has(nextTranslitId)) {
+    try {
+      const translit = await getCachedEdition(nextTranslitId);
+      if (translit) {
+        activeEditions.set(nextTranslitId, translit);
+      }
+    } catch (err) {
+      console.error(`Failed to load transliteration ${nextTranslitId}:`, err);
     }
   }
 
@@ -661,10 +774,11 @@ async function downloadEdition(id: string): Promise<void> {
         await selectTranslation(id);
       }
     } else if (editionMeta?.type === 'transliteration') {
-      if (currentUserPreferences.showTransliteration) {
-        renderedAyahKey = '';
-        renderAyah(currentMatchedAyah);
-      }
+      currentUserPreferences.activeTransliterationId = id;
+      currentUserPreferences.showTransliteration = true;
+      await userPreferencesItem.setValue(currentUserPreferences);
+      renderedAyahKey = '';
+      renderAyah(currentMatchedAyah);
     }
   } catch (err) {
     console.error(`Failed to download edition ${id}:`, err);
@@ -683,12 +797,14 @@ async function removeEdition(id: string): Promise<void> {
     let nextShowArabic = currentUserPreferences.showArabic ?? true;
     let nextActiveTransId = currentUserPreferences.activeTranslationId;
     let nextShowTranslit = currentUserPreferences.showTransliteration;
+    let nextActiveTranslitId = currentUserPreferences.activeTransliterationId;
 
     if (nextActiveTransId === id) {
       nextActiveTransId = null;
     }
-    if (currentUserPreferences.activeTransliterationId === id) {
+    if (nextActiveTranslitId === id) {
       nextShowTranslit = false;
+      nextActiveTranslitId = DEFAULT_TRANSLITERATION_ID;
     }
     if (!nextActiveTransId && !nextShowTranslit && !nextShowArabic) {
       nextShowArabic = true;
@@ -700,6 +816,7 @@ async function removeEdition(id: string): Promise<void> {
       activeTranslationId: nextActiveTransId,
       activeTranslationIds: nextActiveTransId ? [nextActiveTransId] : [],
       showTransliteration: nextShowTranslit,
+      activeTransliterationId: nextActiveTranslitId,
     };
 
     await userPreferencesItem.setValue(currentUserPreferences);
@@ -718,27 +835,46 @@ async function handleTransliterationToggle(enable: boolean): Promise<void> {
     nextShowArabic = true;
   }
 
+  let translitId = currentUserPreferences.activeTransliterationId;
+  if (enable && currentUserPreferences.activeTranslationId) {
+    const activeTransMeta = CURATED_EDITIONS.find(
+      (e) => e.identifier === currentUserPreferences.activeTranslationId,
+    );
+    if (activeTransMeta) {
+      const matching = resolveTransliterationForLanguage(activeTransMeta.language);
+      const cachedIds = await getCachedEditionIds();
+      if (cachedIds.includes(matching.identifier) || !activeEditions.has(translitId)) {
+        translitId = matching.identifier;
+      }
+    }
+  }
+
   currentUserPreferences = {
     ...currentUserPreferences,
     showArabic: nextShowArabic,
     showTransliteration: enable,
+    activeTransliterationId: translitId,
   };
 
-  const translitId = currentUserPreferences.activeTransliterationId;
   if (enable && !activeEditions.has(translitId)) {
-    downloadingEditions.add(translitId);
-    await updateToolbarControls();
-    await renderSettings();
-
-    try {
-      const downloaded = await fetchAndCacheEdition(translitId);
-      activeEditions.set(translitId, downloaded);
-    } catch (err) {
-      console.error('Failed to download transliteration edition:', err);
-    } finally {
-      downloadingEditions.delete(translitId);
+    const cached = await getCachedEdition(translitId);
+    if (cached) {
+      activeEditions.set(translitId, cached);
+    } else {
+      downloadingEditions.add(translitId);
       await updateToolbarControls();
       await renderSettings();
+
+      try {
+        const downloaded = await fetchAndCacheEdition(translitId);
+        activeEditions.set(translitId, downloaded);
+      } catch (err) {
+        console.error(`Failed to download transliteration edition ${translitId}:`, err);
+      } finally {
+        downloadingEditions.delete(translitId);
+        await updateToolbarControls();
+        await renderSettings();
+      }
     }
   }
 

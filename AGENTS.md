@@ -26,7 +26,7 @@
 
 Pre-commit verification gate (all must pass with zero errors):
 ```bash
-pnpm test                  # Vitest suite (46 unit tests)
+pnpm test                  # Vitest suite (58 unit tests)
 pnpm exec tsc --noEmit     # TypeScript typecheck
 pnpm exec biome check      # Linter and formatting check
 pnpm run build             # WXT MV3 production bundle build

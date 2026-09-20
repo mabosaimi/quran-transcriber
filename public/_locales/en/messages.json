@@ -107,6 +107,14 @@
     "message": "Available Languages",
     "description": "Header for list of available languages"
   },
+  "availableTranslations": {
+    "message": "Translations",
+    "description": "Header for translations list in settings"
+  },
+  "availableTransliterations": {
+    "message": "Phonetic Transliterations",
+    "description": "Header for transliterations list in settings"
+  },
   "downloadHint": {
     "message": "Download translations for offline use. Once downloaded, choose them directly from the toolbar.",
     "description": "Hint in settings dialog explaining download workflow"

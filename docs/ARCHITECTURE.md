@@ -89,7 +89,8 @@ A zero-dependency, ultra-low latency in-memory Arabic search engine:
 
 ### 2.4 Multilingual Data Layer (`lib/editions.ts`)
 Offline-first translation and transliteration management:
-- **Curated Edition Catalog**: Fixed metadata for 8 translation editions (Saheeh International, Hamidullah, Jalandhry, Indonesian Ministry, Diyanet, Bubenheim, Cortes, Kuliev) and 1 English phonetic transliteration.
+- **Curated Edition Catalog**: Curated metadata for 8 translation editions (Saheeh International, Hamidullah, Jalandhry, Indonesian Ministry, Diyanet, Bubenheim, Cortes, Kuliev) and 3 phonetic transliterations (`en.transliteration`, `tr.transliteration`, `ru.transliteration`).
+- **Dynamic Transliteration Pairing**: `resolveTransliterationForLanguage()` intelligently auto-pairs transliteration editions with the active translation language while gracefully falling back to English Latin Romanization.
 - **Strict Payload Validation**: `validateAndFlattenEdition()` verifies API payloads from `https://api.alquran.cloud/v1/quran/...`:
   - Enforces HTTP 200 / `code === 200`.
   - Verifies exact count of 114 Surahs.
@@ -105,16 +106,17 @@ The persistent user-facing reading interface:
 - **Synchronous Translation Access**: Reads active translations from an in-memory `Map<string, StoredEdition>` populated on preference changes. Active recitation rendering is 100% synchronous O(1) array access.
 - **Inline Display Toolbar**:
   - `[عربي]` toggle: Toggles Arabic Quranic text on/off.
-  - `[Aa]` toggle: Toggles English phonetic transliteration on/off.
+  - `[Aa]` toggle: Toggles phonetic transliteration on/off.
   - Native select: Populated with native endonyms (`العربية`, `English`, `Français`, `اردو`, etc.) and a `+ Download Languages...` action trigger.
 - **Blank-Card Safeguard**: Ensures the UI never displays an empty card. Disabling Arabic is blocked if no translation or transliteration is active. Removing active translations while Arabic is hidden auto-restores Arabic.
-- **Settings Modal**: Serves as a dedicated offline download manager displaying pack sizes (~1.2 MB), download progress, and cache removal (`Remove` button) to reclaim disk space.
+- **Settings Modal**: Serves as a dedicated offline download manager displaying distinct, grouped sections for Translations and Phonetic Transliterations, pack sizes (~1.2 MB), download progress, and cache removal (`Remove` button) to reclaim disk space.
 
 ---
 
 ## 3. Typographic & BiDi Architecture
 
-- **W3C BiDi Isolation (`<bdi>`)**: In mixed-script contexts, dynamic labels and badges are isolated using `<bdi>` elements to prevent Unicode Bidirectional Algorithm (UBA) bleeding.
+- **W3C BiDi Isolation (`<bdi>`)**: In mixed-script contexts, dynamic labels, badges, and inline ayah number pills are isolated using `<bdi>` elements to prevent Unicode Bidirectional Algorithm (UBA) bleeding.
+- **End-of-Verse Numbering Pills (`.ayah-inline-num`)**: Mirrored after traditional Quranic verse markers (`۝`), attached inline at the end of translation and transliteration blocks. Uses Eastern Arabic numerals (`(١)`) in RTL script contexts and standard numerals (`(1)`) in LTR contexts, with upright `font-style: normal` inside italicized transliteration text.
 - **Neutral Character Transposition Prevention**: Compound numeric strings containing neutral delimiters (such as `ayahBadgeEl` showing `2:255 (1/7)`) are wrapped with `<bdi dir="ltr">` to prevent colon/parenthesis reversal when rendered within RTL parent document contexts.
 - **CSS Logical Properties**: Layout directions use logical properties (`text-align: start`, `margin-inline-start`, `padding-inline-end`, `inset-inline-start`) rather than physical directional constraints.
 - **Font Stack**: Bundled local font asset `/fonts/UthmanTN_v2-0.ttf` loaded via `@font-face` `"Uthmanic"`, styled with `text-rendering: optimizeLegibility` and OpenType ligature features (`liga 1`, `calt 1`).

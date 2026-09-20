@@ -2,13 +2,18 @@ import 'fake-indexeddb/auto';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   CURATED_EDITIONS,
+  DEFAULT_TRANSLITERATION_ID,
   deleteCachedEdition,
   EditionValidationError,
   fetchAndCacheEdition,
+  formatEditionAuthors,
+  getAvailableTransliterations,
   getCachedEdition,
   getCachedEditionIds,
   getLanguageEndonym,
   loadActiveEditions,
+  resolveEditionDirection,
+  resolveTransliterationForLanguage,
   validateAndFlattenEdition,
 } from '@/lib/editions';
 import { SURAHS } from '@/lib/quran-meta';
@@ -74,6 +79,19 @@ describe('lib/editions', () => {
       const turkish = CURATED_EDITIONS.find((e) => e.identifier === 'tr.diyanet');
       expect(turkish?.nativeName).toBe('Türkçe');
     });
+
+    it('curates transliterations and dynamically resolves by language', () => {
+      const translits = getAvailableTransliterations();
+      expect(translits.map((e) => e.identifier)).toEqual([
+        'en.transliteration',
+        'tr.transliteration',
+        'ru.transliteration',
+      ]);
+
+      expect(resolveTransliterationForLanguage('tr').identifier).toBe('tr.transliteration');
+      expect(resolveTransliterationForLanguage('ru').identifier).toBe('ru.transliteration');
+      expect(resolveTransliterationForLanguage('fr').identifier).toBe(DEFAULT_TRANSLITERATION_ID);
+    });
   });
 
   describe('getLanguageEndonym', () => {
@@ -90,6 +108,29 @@ describe('lib/editions', () => {
     });
   });
 
+  describe('formatEditionAuthors', () => {
+    it('deduplicates identical names', () => {
+      expect(formatEditionAuthors('Saheeh International', 'Saheeh International')).toBe(
+        'Saheeh International',
+      );
+    });
+
+    it('prefers the longer complete name when one contains the other', () => {
+      expect(
+        formatEditionAuthors('Bubenheim & Elyas', 'A. S. F. Bubenheim and N. Elyas'),
+      ).toBe('A. S. F. Bubenheim and N. Elyas');
+      expect(formatEditionAuthors('Cortes', 'Julio Cortes')).toBe('Julio Cortes');
+      expect(formatEditionAuthors('Diyanet İşleri', 'Diyanet Isleri')).toBe('Diyanet İşleri');
+    });
+
+    it('combines distinct names across scripts with a separator', () => {
+      expect(formatEditionAuthors('جالندہری', 'Fateh Muhammad Jalandhry')).toBe(
+        'جالندہری · Fateh Muhammad Jalandhry',
+      );
+      expect(formatEditionAuthors('Кулиев', 'Elmir Kuliev')).toBe('Кулиев · Elmir Kuliev');
+    });
+  });
+
   describe('validateAndFlattenEdition', () => {
     it('successfully validates and flattens a valid 6,236-ayah payload', () => {
       const payload = buildMockValidPayload('en.test', 'ltr');
@@ -101,6 +142,17 @@ describe('lib/editions', () => {
       expect(edition.ayahs.length).toBe(6236);
       expect(edition.ayahs[0]).toBe('Translation of Surah 1 Ayah 1');
       expect(edition.ayahs[6235]).toBe('Translation of Surah 114 Ayah 6');
+    });
+
+    it('assigns direction rtl for Urdu when API payload omits direction', () => {
+      const payload = buildMockValidPayload('ur.jalandhry');
+      // @ts-expect-error test real-world API behavior where direction is omitted
+      delete payload.data.edition.direction;
+      payload.data.edition.language = 'ur';
+      const edition = validateAndFlattenEdition(payload);
+
+      expect(edition.identifier).toBe('ur.jalandhry');
+      expect(edition.direction).toBe('rtl');
     });
 
     it('throws EditionValidationError when payload is null or not an object', () => {
@@ -185,6 +237,37 @@ describe('lib/editions', () => {
       expect(inCache?.identifier).toBe('en.remote');
 
       await deleteCachedEdition('en.remote');
+    });
+
+    it('automatically heals stale direction ltr to rtl for Urdu cached edition', async () => {
+      const mock = validateAndFlattenEdition(buildMockValidPayload('ur.jalandhry'));
+      const staleMock = { ...mock, direction: 'ltr' as const };
+      const { set } = await import('idb-keyval');
+      await set('edition:ur.jalandhry', staleMock);
+
+      const cached = await getCachedEdition('ur.jalandhry');
+      expect(cached?.direction).toBe('rtl');
+
+      await deleteCachedEdition('ur.jalandhry');
+    });
+  });
+
+  describe('resolveEditionDirection', () => {
+    it('returns rtl for curated Urdu edition and RTL language codes', () => {
+      expect(resolveEditionDirection('ur.jalandhry')).toBe('rtl');
+      expect(resolveEditionDirection(undefined, 'ur')).toBe('rtl');
+      expect(resolveEditionDirection(undefined, 'ar')).toBe('rtl');
+    });
+
+    it('returns ltr for Latin script languages', () => {
+      expect(resolveEditionDirection('en.sahih')).toBe('ltr');
+      expect(resolveEditionDirection(undefined, 'en')).toBe('ltr');
+      expect(resolveEditionDirection(undefined, 'fr')).toBe('ltr');
+    });
+
+    it('honors explicit direction parameter when specified', () => {
+      expect(resolveEditionDirection('custom', 'en', 'rtl')).toBe('rtl');
+      expect(resolveEditionDirection('custom', 'ur', 'ltr')).toBe('ltr');
     });
   });
 

@@ -1,4 +1,5 @@
 import { storage } from 'wxt/utils/storage';
+import { DEFAULT_TRANSLITERATION_ID } from './editions';
 import type { MatchResult } from './matcher';
 
 export const CaptureState = {
@@ -50,7 +51,7 @@ export const userPreferencesItem = storage.defineItem<UserEditionPreferences>(
       activeTranslationId: null,
       activeTranslationIds: [],
       showTransliteration: false,
-      activeTransliterationId: 'en.transliteration',
+      activeTransliterationId: DEFAULT_TRANSLITERATION_ID,
     },
   },
 );
