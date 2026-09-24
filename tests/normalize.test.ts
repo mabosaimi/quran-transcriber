@@ -28,7 +28,7 @@ describe('normalizeArabic', () => {
 
   it('normalizes alif maqsura and taa marbuta', () => {
     expect(normalizeArabic('هدى')).toBe('هدي');
-    expect(normalizeArabic('رحمة')).toBe(' رحمه'.trim());
+    expect(normalizeArabic('رحمة')).toBe('رحمه');
   });
 
   it('removes non-Arabic characters, digits, and punctuation', () => {
@@ -41,5 +41,13 @@ describe('normalizeArabic', () => {
 
   it('returns an empty string for non-Arabic input', () => {
     expect(normalizeArabic('Hello World 12345 !@#$')).toBe('');
+  });
+
+  it('re-attaches orphaned single-letter proclitics emitted by speech recognition', () => {
+    expect(normalizeArabic('و الذين كفروا')).toBe('والذين كفروا');
+    expect(normalizeArabic('ف قال لهم')).toBe('فقال لهم');
+    expect(normalizeArabic('ب الله')).toBe('بالله');
+    expect(normalizeArabic('و ب الحق')).toBe('وبالحق');
+    expect(normalizeArabic('و الشمس و ضحاها')).toBe('والشمس وضحاها');
   });
 });

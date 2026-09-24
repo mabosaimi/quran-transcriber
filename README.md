@@ -18,7 +18,8 @@ A Chrome extension (Manifest V3) that listens to Quran recitation playing in any
   - `Deutsch` (Bubenheim & Elyas)
   - `Español` (Julio Cortes)
   - `Русский` (Elmir Kuliev)
-- **Phonetic Transliteration**: English Latin transliteration support for non-Arabic readers.
+- **Phonetic Transliteration**: Latin and Cyrillic phonetic transliteration support (English, Turkish, Russian) with automatic language pairing for non-Arabic readers.
+- **BiDi-Safe End-of-Verse Numbering**: Inline ayah numbering pills mirroring traditional Quranic verse markers (`۝`), with script-aware numerals and BiDi isolation (`<bdi>`).
 - **Flexible Display Controls**: Inline toolbar to toggle Arabic (`[عربي]`), transliteration (`[Aa]`), or choose translations from a native dropdown with blank-card safety.
 - **Offline-First Storage**: Download translations once (~1.2 MB per pack) for offline use. Verse retrieval requires zero network calls.
 - **Authentic Mushaf Typography**: Bundled Uthmanic font with OpenType ligatures, ayah markers (`۝`), and Sajdah badges (`۩`).

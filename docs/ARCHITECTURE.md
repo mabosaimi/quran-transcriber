@@ -85,7 +85,11 @@ A zero-dependency, ultra-low latency in-memory Arabic search engine:
   - Normalizes alef variants (`أ`, `إ`, `آ`, `ٱ` → `ا`).
   - Normalizes taa marbuta (`ة` → `ه`) and alef maqsura (`ى` → `ي`).
   - Removes tatweel / kashida (`ـ`) and collapses duplicate whitespace.
-- **Matching Algorithm**: Tokenizes the normalized transcript into consecutive n-gram windows and performs sliding token scan against the corpus. Sub-millisecond match times (<0.1ms) across the entire Quran prevent audio renderer thread blocking.
+  - Re-attaches orphaned single-letter proclitics (`و`, `ف`, `ب`, `ل`) emitted by ASR to subsequent words without root-letter mutilation.
+- **Two-Mode Matching Architecture**:
+  - **Tracking Mode** (Hot Path): Evaluates a bounded neighborhood (`[-1, 0, +1, +2]`) with recency-weighted token scoring and verse coverage transitions. Falls through to Discovery Mode when the local neighborhood has no confident match, enabling recovery from wrong predictions or non-adjacent jumps. Maintains passive retention across breath pauses (5s desync window) and seamlessly handles verse repetitions.
+  - **Discovery Mode** (Cold Path): Inverted index search weighted by precomputed Inverse Document Frequency (IDF, $\ln(N / df)$). Accurately discovers single-word hapax verses ($\text{IDF} \ge 6.0$, e.g. *Al-Fajr*, *Al-'Asr*) while strictly rejecting solitary common words (`الله`, `من`, `في`). Also serves as a re-synchronization path when tracking loses lock.
+  - **Zero-Allocation Hot Path**: Operates via pre-allocated TypedArrays (`Float32Array`, `Uint16Array`, `Int32Array`) with dirty-index tracking, eliminating GC pressure on the Blink renderer thread (<0.05ms average latency).
 
 ### 2.4 Multilingual Data Layer (`lib/editions.ts`)
 Offline-first translation and transliteration management:
