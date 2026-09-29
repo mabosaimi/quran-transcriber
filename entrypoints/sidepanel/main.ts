@@ -16,7 +16,15 @@ import {
   type StoredEdition,
 } from '@/lib/editions';
 import { type CaptureResponseMessage, MSG } from '@/lib/messages';
-import { isSajdah, toArabicNumerals } from '@/lib/quran-meta';
+import { normalizeArabic } from '@/lib/normalize';
+import {
+  type CorpusAyah,
+  getSurahVerses,
+  initCorpus,
+  isCorpusLoaded,
+  type QuranVerseTuple,
+} from '@/lib/quran-corpus';
+import { SURAHS, type SurahMeta, toArabicNumerals } from '@/lib/quran-meta';
 import {
   CaptureState,
   type CaptureStateValue,
@@ -34,18 +42,53 @@ let toggleBtn: HTMLButtonElement;
 let idleHint: HTMLElement;
 let statusEl: HTMLElement;
 let errorBanner: HTMLElement;
-let placeholderView: HTMLElement;
-let placeholderText: HTMLElement;
 let listeningIndicator: HTMLElement;
-let ayahCard: HTMLElement;
-let surahArabicEl: HTMLElement;
-let surahEnglishEl: HTMLElement;
-let ayahBadgeEl: HTMLElement;
-let sajdahBadgeEl: HTMLElement;
-let ayahTextEl: HTMLElement;
-let transliterationContainerEl: HTMLElement;
-let transliterationTextEl: HTMLElement;
-let translationsContainerEl: HTMLElement;
+
+let surahPickerTrigger: HTMLButtonElement;
+let surahTriggerNumber: HTMLElement;
+let surahTriggerName: HTMLElement;
+let surahTriggerCount: HTMLElement;
+let surahTriggerArabic: HTMLElement;
+
+let surahPickerDialog: HTMLDialogElement;
+let surahPickerCloseBtn: HTMLButtonElement;
+let surahSearchInput: HTMLInputElement;
+let surahPickerList: HTMLElement;
+let surahPickerEmpty: HTMLElement;
+let surahFilterPills: NodeListOf<HTMLButtonElement>;
+
+type SurahFilterType = 'all' | 'meccan' | 'medinan';
+let currentSurahFilter: SurahFilterType = 'all';
+let currentHighlightedIndex = 0;
+type PickerListItem =
+  | { type: 'jump'; surah: SurahMeta; ayah: number }
+  | { type: 'surah'; surah: SurahMeta };
+let currentFilteredItems: PickerListItem[] = [];
+
+interface IndexedSurah {
+  readonly meta: SurahMeta;
+  readonly numberStr: string;
+  readonly cleanEnglish: string;
+  readonly normalizedArabic: string;
+  readonly unaliasedArabic: string;
+}
+
+const INDEXED_SURAHS: readonly IndexedSurah[] = SURAHS.map((meta) => {
+  const normAr = normalizeArabic(meta.nameArabic);
+  return Object.freeze({
+    meta,
+    numberStr: String(meta.number),
+    cleanEnglish: meta.nameEnglish.toLowerCase().replace(/[-'\s]/g, ''),
+    normalizedArabic: normAr,
+    unaliasedArabic: normAr.startsWith('ال') ? normAr.slice(2) : normAr,
+  });
+});
+
+let programmaticScrollTimer: ReturnType<typeof setTimeout> | null = null;
+
+let surahFeedEl: HTMLElement;
+let followReciterBtn: HTMLButtonElement;
+let followReciterTextEl: HTMLElement;
 
 let toggleArabicBtn: HTMLButtonElement;
 let toggleTranslitBtn: HTMLButtonElement;
@@ -58,7 +101,10 @@ let editionsListEl: HTMLElement;
 
 let currentCaptureState: CaptureStateValue = CaptureState.IDLE;
 let currentMatchedAyah: MatchedAyah | null = null;
-let renderedAyahKey = '';
+let currentFeedSurah = 1;
+let currentActiveAyahNumber: number | null = null;
+let isUserFollowing = true;
+let isProgrammaticScrolling = false;
 let isToggling = false;
 let activeTabRequired = false;
 
@@ -82,26 +128,34 @@ function queryDOMElements(): boolean {
   const hint = document.getElementById('idle-hint');
   const status = document.getElementById('status');
   const error = document.getElementById('error-banner');
-  const placeholder = document.getElementById('placeholder-view');
-  const text = document.getElementById('placeholder-text');
   const indicator = document.getElementById('listening-indicator');
-  const card = document.getElementById('ayah-card');
-  const surahAr = document.getElementById('surah-arabic');
-  const surahEn = document.getElementById('surah-english');
-  const badge = document.getElementById('ayah-badge');
-  const sajdah = document.getElementById('sajdah-badge');
-  const ayahTxt = document.getElementById('ayah-text');
-  const translitCont = document.getElementById('transliteration-container');
-  const translitTxt = document.getElementById('transliteration-text');
-  const translationsCont = document.getElementById('translations-container');
+
+  const sTrigger = document.getElementById('surah-picker-trigger') as HTMLButtonElement | null;
+  const sTrigNum = document.getElementById('surah-trigger-number');
+  const sTrigName = document.getElementById('surah-trigger-name');
+  const sTrigCount = document.getElementById('surah-trigger-count');
+  const sTrigArabic = document.getElementById('surah-trigger-arabic');
+
+  const sDialog = document.getElementById('surah-picker-dialog') as HTMLDialogElement | null;
+  const sClose = document.getElementById('surah-picker-close-btn') as HTMLButtonElement | null;
+  const sInput = document.getElementById('surah-search-input') as HTMLInputElement | null;
+  const sList = document.getElementById('surah-picker-list');
+  const sEmpty = document.getElementById('surah-picker-empty');
+  const sPills = document.querySelectorAll<HTMLButtonElement>('.surah-filter-pill');
+
+  const sFeed = document.getElementById('surah-feed');
+  const fBtn = document.getElementById('follow-reciter-btn') as HTMLButtonElement | null;
+  const fTxt = document.getElementById('follow-reciter-text');
 
   const tArabicBtn = document.getElementById('toggle-arabic-btn') as HTMLButtonElement | null;
   const tTranslitBtn = document.getElementById('toggle-translit-btn') as HTMLButtonElement | null;
   const tSelect = document.getElementById('translation-select') as HTMLSelectElement | null;
 
   const sBtn = document.getElementById('settings-btn') as HTMLButtonElement | null;
-  const sDialog = document.getElementById('settings-dialog') as HTMLDialogElement | null;
-  const sCloseBtn = document.getElementById('settings-close-btn') as HTMLButtonElement | null;
+  const sSettingsDialog = document.getElementById('settings-dialog') as HTMLDialogElement | null;
+  const sSettingsCloseBtn = document.getElementById(
+    'settings-close-btn',
+  ) as HTMLButtonElement | null;
   const eList = document.getElementById('editions-list');
 
   if (
@@ -109,24 +163,26 @@ function queryDOMElements(): boolean {
     !hint ||
     !status ||
     !error ||
-    !placeholder ||
-    !text ||
     !indicator ||
-    !card ||
-    !surahAr ||
-    !surahEn ||
-    !badge ||
-    !sajdah ||
-    !ayahTxt ||
-    !translitCont ||
-    !translitTxt ||
-    !translationsCont ||
+    !sTrigger ||
+    !sTrigNum ||
+    !sTrigName ||
+    !sTrigCount ||
+    !sTrigArabic ||
+    !sDialog ||
+    !sClose ||
+    !sInput ||
+    !sList ||
+    !sEmpty ||
+    !sFeed ||
+    !fBtn ||
+    !fTxt ||
     !tArabicBtn ||
     !tTranslitBtn ||
     !tSelect ||
     !sBtn ||
-    !sDialog ||
-    !sCloseBtn ||
+    !sSettingsDialog ||
+    !sSettingsCloseBtn ||
     !eList
   ) {
     console.error('Missing required side panel DOM elements');
@@ -137,26 +193,32 @@ function queryDOMElements(): boolean {
   idleHint = hint;
   statusEl = status;
   errorBanner = error;
-  placeholderView = placeholder;
-  placeholderText = text;
   listeningIndicator = indicator;
-  ayahCard = card;
-  surahArabicEl = surahAr;
-  surahEnglishEl = surahEn;
-  ayahBadgeEl = badge;
-  sajdahBadgeEl = sajdah;
-  ayahTextEl = ayahTxt;
-  transliterationContainerEl = translitCont;
-  transliterationTextEl = translitTxt;
-  translationsContainerEl = translationsCont;
+
+  surahPickerTrigger = sTrigger;
+  surahTriggerNumber = sTrigNum;
+  surahTriggerName = sTrigName;
+  surahTriggerCount = sTrigCount;
+  surahTriggerArabic = sTrigArabic;
+
+  surahPickerDialog = sDialog;
+  surahPickerCloseBtn = sClose;
+  surahSearchInput = sInput;
+  surahPickerList = sList;
+  surahPickerEmpty = sEmpty;
+  surahFilterPills = sPills;
+
+  surahFeedEl = sFeed;
+  followReciterBtn = fBtn;
+  followReciterTextEl = fTxt;
 
   toggleArabicBtn = tArabicBtn;
   toggleTranslitBtn = tTranslitBtn;
   translationSelectEl = tSelect;
 
   settingsBtn = sBtn;
-  settingsDialog = sDialog;
-  settingsCloseBtn = sCloseBtn;
+  settingsDialog = sSettingsDialog;
+  settingsCloseBtn = sSettingsCloseBtn;
   editionsListEl = eList;
 
   return true;
@@ -178,9 +240,778 @@ function localizeUI(): void {
     if (key) el.title = browser.i18n.getMessage(key);
   }
 
-  for (const el of document.querySelectorAll<HTMLElement>('[data-i18n-placeholder]')) {
+  for (const el of document.querySelectorAll<HTMLInputElement>('[data-i18n-placeholder]')) {
     const key = el.dataset.i18nPlaceholder as I18nKey | undefined;
-    if (key) el.dataset.placeholder = browser.i18n.getMessage(key);
+    if (key) el.placeholder = browser.i18n.getMessage(key);
+  }
+}
+
+function updateSurahTrigger(surahNumber: number): void {
+  const meta = SURAHS[surahNumber - 1];
+  if (!meta) return;
+  surahTriggerNumber.textContent = String(meta.number);
+  surahTriggerName.textContent = meta.nameEnglish;
+  const countMsg = browser.i18n.getMessage('versesCount', [String(meta.totalAyahs)]);
+  surahTriggerCount.textContent = countMsg || `${meta.totalAyahs} verses`;
+  surahTriggerArabic.textContent = meta.nameArabic;
+}
+
+function openSurahPicker(): void {
+  surahPickerTrigger.setAttribute('aria-expanded', 'true');
+  currentSurahFilter = 'all';
+  updateFilterPillsUI();
+  surahSearchInput.value = '';
+  filterAndRenderSurahList('');
+  surahPickerDialog.showModal();
+  surahSearchInput.focus();
+
+  requestAnimationFrame(() => {
+    const selectedEl = surahPickerList.querySelector('.surah-option--selected');
+    if (selectedEl) {
+      selectedEl.scrollIntoView({ block: 'nearest' });
+    }
+  });
+}
+
+function closeSurahPicker(): void {
+  surahPickerTrigger.setAttribute('aria-expanded', 'false');
+  if (surahPickerDialog.open) {
+    surahPickerDialog.close();
+  }
+  surahPickerTrigger.focus();
+}
+
+function onSurahPickerBackdropClick(event: MouseEvent): void {
+  if (event.target !== surahPickerDialog) return;
+  const rect = surahPickerDialog.getBoundingClientRect();
+  const isInDialog =
+    rect.top <= event.clientY &&
+    event.clientY <= rect.top + rect.height &&
+    rect.left <= event.clientX &&
+    event.clientX <= rect.left + rect.width;
+  if (!isInDialog) {
+    closeSurahPicker();
+  }
+}
+
+function parseAyahJumpQuery(rawQuery: string): { surah: SurahMeta; ayah: number } | null {
+  const trimmed = rawQuery.trim();
+  const match = trimmed.match(/^([a-zA-Z\u0600-\u06FF0-9\s\-']+?)[:\s]+(\d+)$/);
+  if (!match) return null;
+
+  const surahPart = match[1]?.trim().toLowerCase();
+  const ayahNum = parseInt(match[2] ?? '', 10);
+  if (!surahPart || Number.isNaN(ayahNum) || ayahNum <= 0) return null;
+
+  const asNum = parseInt(surahPart, 10);
+  if (!Number.isNaN(asNum) && asNum >= 1 && asNum <= 114) {
+    const target = INDEXED_SURAHS[asNum - 1]?.meta;
+    if (target && ayahNum <= target.totalAyahs) {
+      return { surah: target, ayah: ayahNum };
+    }
+  }
+
+  const cleanEnglish = surahPart.replace(/[-'\s]/g, '');
+  const matchedByEnglish = INDEXED_SURAHS.find(
+    (item) => item.cleanEnglish === cleanEnglish || item.cleanEnglish.startsWith(cleanEnglish),
+  )?.meta;
+  if (matchedByEnglish && ayahNum <= matchedByEnglish.totalAyahs) {
+    return { surah: matchedByEnglish, ayah: ayahNum };
+  }
+
+  const normAr = normalizeArabic(surahPart);
+  const unaliased = normAr.startsWith('ال') ? normAr.slice(2) : normAr;
+  const matchedByArabic = INDEXED_SURAHS.find(
+    (item) =>
+      normAr.length > 0 &&
+      (item.normalizedArabic === normAr ||
+        item.unaliasedArabic === unaliased ||
+        item.normalizedArabic.includes(normAr)),
+  )?.meta;
+  if (matchedByArabic && ayahNum <= matchedByArabic.totalAyahs) {
+    return { surah: matchedByArabic, ayah: ayahNum };
+  }
+
+  return null;
+}
+
+function updateFilterPillsUI(): void {
+  surahFilterPills.forEach((pill) => {
+    const filter = pill.dataset.filter as SurahFilterType;
+    if (filter === currentSurahFilter) {
+      pill.classList.add('surah-filter-pill--active');
+    } else {
+      pill.classList.remove('surah-filter-pill--active');
+    }
+  });
+}
+
+function onFilterPillClick(e: Event): void {
+  const target = e.currentTarget as HTMLButtonElement;
+  const filter = target.dataset.filter as SurahFilterType | undefined;
+  if (filter && filter !== currentSurahFilter) {
+    currentSurahFilter = filter;
+    updateFilterPillsUI();
+    filterAndRenderSurahList(surahSearchInput.value);
+  }
+}
+
+function filterAndRenderSurahList(rawQuery: string): void {
+  const query = rawQuery.trim();
+  currentFilteredItems = [];
+
+  const jumpTarget = parseAyahJumpQuery(query);
+  if (jumpTarget) {
+    currentFilteredItems.push({
+      type: 'jump',
+      surah: jumpTarget.surah,
+      ayah: jumpTarget.ayah,
+    });
+  }
+
+  const queryLower = query.toLowerCase();
+  const cleanEnglishQuery = queryLower.replace(/[-'\s]/g, '');
+  const normQuery = normalizeArabic(query);
+  const unaliasedQuery = normQuery.startsWith('ال') ? normQuery.slice(2) : normQuery;
+
+  for (let i = 0; i < INDEXED_SURAHS.length; i++) {
+    const item = INDEXED_SURAHS[i];
+    if (!item) continue;
+    if (currentSurahFilter !== 'all' && item.meta.revelation !== currentSurahFilter) {
+      continue;
+    }
+
+    if (!query) {
+      currentFilteredItems.push({ type: 'surah', surah: item.meta });
+      continue;
+    }
+
+    const matchesNumber = item.numberStr === query || item.numberStr.startsWith(query);
+    const matchesEnglish =
+      item.meta.nameEnglish.toLowerCase().includes(queryLower) ||
+      (cleanEnglishQuery.length > 0 && item.cleanEnglish.includes(cleanEnglishQuery));
+    const matchesArabic =
+      normQuery.length > 0 &&
+      (item.normalizedArabic.includes(normQuery) || item.unaliasedArabic.includes(unaliasedQuery));
+
+    if (matchesNumber || matchesEnglish || matchesArabic) {
+      currentFilteredItems.push({ type: 'surah', surah: item.meta });
+    }
+  }
+
+  surahPickerList.innerHTML = '';
+  if (currentFilteredItems.length === 0) {
+    surahPickerEmpty.hidden = false;
+    currentHighlightedIndex = -1;
+    return;
+  }
+
+  surahPickerEmpty.hidden = true;
+  currentHighlightedIndex = 0;
+
+  const fragment = document.createDocumentFragment();
+
+  for (let idx = 0; idx < currentFilteredItems.length; idx++) {
+    const item = currentFilteredItems[idx];
+    if (!item) continue;
+    const opt = document.createElement('div');
+    opt.className = 'surah-option';
+    opt.setAttribute('role', 'option');
+    opt.dataset.index = String(idx);
+
+    if (idx === currentHighlightedIndex) {
+      opt.classList.add('surah-option--active');
+    }
+
+    if (item.type === 'jump') {
+      opt.classList.add('surah-option--jump');
+      const lead = document.createElement('div');
+      lead.className = 'surah-option__lead';
+
+      const badge = document.createElement('span');
+      badge.className = 'surah-option__badge';
+      badge.textContent = '→';
+
+      const meta = document.createElement('div');
+      meta.className = 'surah-option__meta';
+
+      const name = document.createElement('span');
+      name.className = 'surah-option__name';
+      const jumpMsg = browser.i18n.getMessage('jumpToAyah', [
+        item.surah.nameEnglish,
+        String(item.ayah),
+      ]);
+      name.textContent = jumpMsg || `Jump to ${item.surah.nameEnglish}, Ayah ${item.ayah}`;
+
+      const sub = document.createElement('div');
+      sub.className = 'surah-option__sub';
+      sub.textContent = `${item.surah.number}:${item.ayah}`;
+
+      meta.appendChild(name);
+      meta.appendChild(sub);
+      lead.appendChild(badge);
+      lead.appendChild(meta);
+      opt.appendChild(lead);
+    } else {
+      const isSelected = item.surah.number === currentFeedSurah;
+      if (isSelected) {
+        opt.classList.add('surah-option--selected');
+        opt.setAttribute('aria-selected', 'true');
+      }
+
+      const lead = document.createElement('div');
+      lead.className = 'surah-option__lead';
+
+      const badge = document.createElement('span');
+      badge.className = 'surah-option__badge';
+      badge.textContent = String(item.surah.number);
+
+      const meta = document.createElement('div');
+      meta.className = 'surah-option__meta';
+
+      const name = document.createElement('span');
+      name.className = 'surah-option__name';
+      name.textContent = item.surah.nameEnglish;
+
+      const sub = document.createElement('div');
+      sub.className = 'surah-option__sub';
+
+      const count = document.createElement('span');
+      const versesMsg = browser.i18n.getMessage('versesCount', [String(item.surah.totalAyahs)]);
+      count.textContent = versesMsg || `${item.surah.totalAyahs} verses`;
+
+      const dot = document.createElement('span');
+      dot.textContent = '•';
+
+      const tag = document.createElement('span');
+      tag.className = 'surah-option__tag';
+      tag.textContent = browser.i18n.getMessage(item.surah.revelation) || item.surah.revelation;
+
+      sub.appendChild(count);
+      sub.appendChild(dot);
+      sub.appendChild(tag);
+
+      meta.appendChild(name);
+      meta.appendChild(sub);
+      lead.appendChild(badge);
+      lead.appendChild(meta);
+
+      const arabic = document.createElement('span');
+      arabic.className = 'surah-option__arabic';
+      arabic.textContent = item.surah.nameArabic;
+
+      opt.appendChild(lead);
+      opt.appendChild(arabic);
+    }
+
+    fragment.appendChild(opt);
+  }
+
+  surahPickerList.appendChild(fragment);
+}
+
+function updateHighlightedItem(): void {
+  const options = surahPickerList.querySelectorAll('.surah-option');
+  options.forEach((opt, idx) => {
+    if (idx === currentHighlightedIndex) {
+      opt.classList.add('surah-option--active');
+      opt.scrollIntoView({ block: 'nearest' });
+    } else {
+      opt.classList.remove('surah-option--active');
+    }
+  });
+}
+
+function onSurahPickerListClick(e: MouseEvent): void {
+  const target = e.target as HTMLElement | null;
+  const opt = target?.closest<HTMLElement>('.surah-option');
+  if (!opt) return;
+
+  const idx = Number(opt.dataset.index);
+  const item = currentFilteredItems[idx];
+  if (item) {
+    if (item.type === 'jump') {
+      selectSurahAndAyah(item.surah.number, item.ayah);
+    } else {
+      selectSurahAndAyah(item.surah.number, null);
+    }
+  }
+}
+
+function onSurahSearchInput(): void {
+  filterAndRenderSurahList(surahSearchInput.value);
+}
+
+function onSurahKeyNavigation(e: KeyboardEvent): void {
+  if (!surahPickerDialog.open) return;
+
+  if (e.key === 'ArrowDown') {
+    e.preventDefault();
+    if (currentFilteredItems.length > 0) {
+      currentHighlightedIndex = (currentHighlightedIndex + 1) % currentFilteredItems.length;
+      updateHighlightedItem();
+    }
+  } else if (e.key === 'ArrowUp') {
+    e.preventDefault();
+    if (currentFilteredItems.length > 0) {
+      currentHighlightedIndex =
+        (currentHighlightedIndex - 1 + currentFilteredItems.length) % currentFilteredItems.length;
+      updateHighlightedItem();
+    }
+  } else if (e.key === 'Enter') {
+    e.preventDefault();
+    const item = currentFilteredItems[currentHighlightedIndex];
+    if (item) {
+      if (item.type === 'jump') {
+        selectSurahAndAyah(item.surah.number, item.ayah);
+      } else {
+        selectSurahAndAyah(item.surah.number, null);
+      }
+    }
+  }
+}
+
+function selectSurahAndAyah(surahNumber: number, ayahNumber: number | null): void {
+  closeSurahPicker();
+  currentFeedSurah = surahNumber;
+  updateSurahTrigger(surahNumber);
+
+  if (currentCaptureState === CaptureState.CAPTURING) {
+    if (currentMatchedAyah && currentMatchedAyah.surah === surahNumber && ayahNumber === null) {
+      const targetAyah = currentMatchedAyah.ayah;
+      isUserFollowing = true;
+      followReciterBtn.hidden = true;
+      renderSurahFeed(surahNumber, targetAyah);
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          scrollToAyah(targetAyah, false);
+        });
+      });
+    } else {
+      isUserFollowing = false;
+      renderSurahFeed(surahNumber, ayahNumber);
+      if (ayahNumber) {
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            scrollToAyah(ayahNumber, false);
+          });
+        });
+      }
+      updateFollowReciterButton();
+    }
+  } else {
+    renderSurahFeed(surahNumber, ayahNumber);
+    if (ayahNumber) {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          scrollToAyah(ayahNumber, false);
+        });
+      });
+    }
+  }
+}
+
+function onGlobalKeyDown(e: KeyboardEvent): void {
+  const target = e.target as HTMLElement | null;
+  const isInput =
+    target &&
+    (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable);
+
+  if (e.key === '/' && !isInput) {
+    e.preventDefault();
+    openSurahPicker();
+    return;
+  }
+
+  if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+    e.preventDefault();
+    if (surahPickerDialog.open) {
+      closeSurahPicker();
+    } else {
+      openSurahPicker();
+    }
+  }
+}
+
+function createAyahNumberPill(ayahNumber: number, direction: 'ltr' | 'rtl' = 'ltr'): HTMLElement {
+  const pill = document.createElement('span');
+  pill.className = 'ayah-inline-num';
+
+  const bdi = document.createElement('bdi');
+  bdi.setAttribute('dir', direction);
+  if (direction === 'rtl') {
+    bdi.textContent = `(${toArabicNumerals(ayahNumber)})`;
+  } else {
+    bdi.textContent = `(${ayahNumber})`;
+  }
+
+  pill.appendChild(bdi);
+  return pill;
+}
+
+function renderSurahFeed(surahNumber: number, activeAyah: number | null): void {
+  currentFeedSurah = surahNumber;
+  currentActiveAyahNumber = activeAyah;
+  updateSurahTrigger(surahNumber);
+  surahFeedEl.innerHTML = '';
+
+  const meta = SURAHS[surahNumber - 1];
+  if (!meta) return;
+
+  const fragment = document.createDocumentFragment();
+
+  const header = document.createElement('header');
+  header.className = 'surah-feed-header';
+
+  const titleAr = document.createElement('div');
+  titleAr.className = 'surah-feed-header__arabic';
+  titleAr.setAttribute('dir', 'rtl');
+  titleAr.setAttribute('lang', 'ar');
+  titleAr.textContent = `سورة ${meta.nameArabic}`;
+
+  const metaRow = document.createElement('div');
+  metaRow.className = 'surah-feed-header__meta';
+
+  const titleEn = document.createElement('span');
+  titleEn.textContent = meta.nameEnglish;
+
+  const dot = document.createElement('span');
+  dot.textContent = '•';
+
+  const countSpan = document.createElement('span');
+  countSpan.textContent = `${meta.totalAyahs} Ayahs`;
+
+  metaRow.appendChild(titleEn);
+  metaRow.appendChild(dot);
+  metaRow.appendChild(countSpan);
+
+  header.appendChild(titleAr);
+  header.appendChild(metaRow);
+  fragment.appendChild(header);
+
+  // Unnumbered Basmalah header for Surahs 2-114 (except Surah 9 At-Tawbah)
+  if (surahNumber !== 1 && surahNumber !== 9) {
+    const basmalahEl = document.createElement('div');
+    basmalahEl.className = 'surah-basmalah';
+    basmalahEl.setAttribute('dir', 'rtl');
+    basmalahEl.setAttribute('lang', 'ar');
+    basmalahEl.textContent = 'بِسْمِ ٱللَّهِ ٱلرَّحْمَـٰنِ ٱلرَّحِيمِ';
+    fragment.appendChild(basmalahEl);
+  }
+
+  const verses = getSurahVerses(surahNumber);
+  const showAr = currentUserPreferences.showArabic ?? true;
+  const activeTransId =
+    currentUserPreferences.activeTranslationId !== undefined
+      ? currentUserPreferences.activeTranslationId
+      : (currentUserPreferences.activeTranslationIds?.[0] ?? null);
+
+  for (let i = 0; i < verses.length; i++) {
+    const ayah = verses[i] as CorpusAyah;
+    const isActive = activeAyah === ayah.ayah;
+
+    const card = document.createElement('article');
+    card.id = `ayah-${ayah.ayah}`;
+    card.dataset.ayah = String(ayah.ayah);
+    card.className = isActive ? 'ayah-card ayah-card--active' : 'ayah-card ayah-card--context';
+
+    const cardHeader = document.createElement('header');
+    cardHeader.className = 'ayah-card__header';
+
+    const surahInfo = document.createElement('div');
+    surahInfo.className = 'ayah-card__surah-info';
+
+    const surahArSpan = document.createElement('span');
+    surahArSpan.className = 'ayah-card__surah-arabic';
+    surahArSpan.setAttribute('dir', 'rtl');
+    surahArSpan.setAttribute('lang', 'ar');
+    surahArSpan.textContent = `سورة ${ayah.surahNameArabic}`;
+
+    const surahEnSpan = document.createElement('span');
+    surahEnSpan.className = 'ayah-card__surah-english';
+    surahEnSpan.textContent = `${ayah.surahNameEnglish} ${ayah.surah}:${ayah.ayah}`;
+
+    surahInfo.appendChild(surahArSpan);
+    surahInfo.appendChild(surahEnSpan);
+
+    const badges = document.createElement('div');
+    badges.className = 'ayah-card__badges';
+
+    if (ayah.isSajdah) {
+      const sajdahBadge = document.createElement('span');
+      sajdahBadge.className = 'ayah-card__sajdah-badge';
+      const sajdahBdi = document.createElement('bdi');
+      const sajdahText = browser.i18n.getMessage('sajdahBadge') || 'Sajdah';
+      sajdahBdi.textContent = `۩ ${sajdahText}`;
+      sajdahBadge.appendChild(sajdahBdi);
+      badges.appendChild(sajdahBadge);
+    }
+
+    const ayahBadge = document.createElement('div');
+    ayahBadge.className = 'ayah-card__badge';
+    ayahBadge.setAttribute('dir', 'ltr');
+    const badgeBdi = document.createElement('bdi');
+    badgeBdi.setAttribute('dir', 'ltr');
+    badgeBdi.textContent = `${ayah.surah}:${ayah.ayah} (${ayah.ayah}/${ayah.totalAyahs})`;
+    ayahBadge.appendChild(badgeBdi);
+    badges.appendChild(ayahBadge);
+
+    cardHeader.appendChild(surahInfo);
+    cardHeader.appendChild(badges);
+    card.appendChild(cardHeader);
+
+    const body = document.createElement('div');
+    body.className = 'ayah-card__body';
+
+    let hasPrecedingContent = showAr;
+
+    if (showAr) {
+      const p = document.createElement('p');
+      p.className = 'ayah-card__text';
+      p.setAttribute('dir', 'rtl');
+      p.setAttribute('lang', 'ar');
+      p.textContent = `${ayah.uthmani}\u00A0${ayah.ayahMarker}`.trim();
+      body.appendChild(p);
+    }
+
+    if (
+      currentUserPreferences.showTransliteration &&
+      currentUserPreferences.activeTransliterationId
+    ) {
+      const translitEdition = activeEditions.get(currentUserPreferences.activeTransliterationId);
+      const text = translitEdition?.ayahs[ayah.index];
+      if (text) {
+        const translitContainer = document.createElement('div');
+        translitContainer.className = 'ayah-card__transliteration';
+        translitContainer.setAttribute('dir', 'ltr');
+        if (!hasPrecedingContent) {
+          translitContainer.style.borderTop = 'none';
+          translitContainer.style.paddingTop = '0';
+        }
+
+        const translitP = document.createElement('p');
+        translitP.className = 'ayah-card__transliteration-text';
+        translitP.textContent = text;
+        translitP.appendChild(document.createTextNode(' '));
+        translitP.appendChild(createAyahNumberPill(ayah.ayah, 'ltr'));
+
+        translitContainer.appendChild(translitP);
+        body.appendChild(translitContainer);
+        hasPrecedingContent = true;
+      }
+    }
+
+    if (activeTransId) {
+      const edition = activeEditions.get(activeTransId);
+      if (edition) {
+        const text = edition.ayahs[ayah.index];
+        if (text) {
+          const transContainer = document.createElement('div');
+          transContainer.className = 'ayah-card__translations';
+
+          const block = document.createElement('div');
+          block.className = 'ayah-translation-block';
+          const direction = resolveEditionDirection(
+            edition.identifier,
+            edition.language,
+            edition.direction,
+          );
+          block.setAttribute('dir', direction);
+          if (!hasPrecedingContent) {
+            block.style.borderTop = 'none';
+            block.style.paddingTop = '0';
+          }
+
+          const label = document.createElement('span');
+          label.className = 'ayah-translation-label';
+          const labelBdi = document.createElement('bdi');
+          labelBdi.textContent = getLanguageEndonym(edition.language);
+          label.appendChild(labelBdi);
+
+          const p = document.createElement('p');
+          p.className = 'ayah-translation-text';
+          p.textContent = text;
+          p.appendChild(document.createTextNode(' '));
+          p.appendChild(createAyahNumberPill(ayah.ayah, direction));
+
+          block.appendChild(label);
+          block.appendChild(p);
+          transContainer.appendChild(block);
+          body.appendChild(transContainer);
+        }
+      }
+    }
+
+    card.appendChild(body);
+    fragment.appendChild(card);
+  }
+
+  surahFeedEl.appendChild(fragment);
+}
+
+function scrollToAyah(ayahNumber: number, isSmooth = true): void {
+  const target = document.getElementById(`ayah-${ayahNumber}`);
+  if (!target || !surahFeedEl) return;
+
+  if (programmaticScrollTimer !== null) {
+    clearTimeout(programmaticScrollTimer);
+    programmaticScrollTimer = null;
+  }
+
+  isProgrammaticScrolling = true;
+  target.scrollIntoView({
+    behavior: isSmooth ? 'smooth' : 'instant',
+    block: 'center',
+  });
+
+  const onScrollEnd = () => {
+    isProgrammaticScrolling = false;
+    if (programmaticScrollTimer !== null) {
+      clearTimeout(programmaticScrollTimer);
+      programmaticScrollTimer = null;
+    }
+  };
+
+  if (!isSmooth) {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        onScrollEnd();
+      });
+    });
+  } else {
+    surahFeedEl.addEventListener('scrollend', onScrollEnd, { once: true });
+    programmaticScrollTimer = setTimeout(onScrollEnd, 600);
+  }
+}
+
+function updateFollowReciterButton(): void {
+  if (isUserFollowing || currentCaptureState !== CaptureState.CAPTURING || !currentMatchedAyah) {
+    followReciterBtn.hidden = true;
+    return;
+  }
+
+  followReciterBtn.hidden = false;
+  const followMsg = browser.i18n.getMessage('followReciter') || 'Follow Reciter';
+  const meta = SURAHS[currentMatchedAyah.surah - 1];
+  const surahName = meta?.nameEnglish ?? `Surah ${currentMatchedAyah.surah}`;
+  followReciterTextEl.textContent = `${followMsg} (${surahName} ${currentMatchedAyah.ayah})`;
+}
+
+function checkActiveAyahVisibility(): void {
+  if (!currentMatchedAyah || currentCaptureState !== CaptureState.CAPTURING) {
+    followReciterBtn.hidden = true;
+    return;
+  }
+
+  if (currentFeedSurah !== currentMatchedAyah.surah) {
+    isUserFollowing = false;
+    updateFollowReciterButton();
+    return;
+  }
+
+  const activeCard = document.getElementById(`ayah-${currentMatchedAyah.ayah}`);
+  if (!activeCard || !surahFeedEl) {
+    isUserFollowing = false;
+    updateFollowReciterButton();
+    return;
+  }
+
+  const feedRect = surahFeedEl.getBoundingClientRect();
+  const cardRect = activeCard.getBoundingClientRect();
+
+  const isOutOfView = cardRect.bottom < feedRect.top + 20 || cardRect.top > feedRect.bottom - 20;
+
+  if (isOutOfView) {
+    isUserFollowing = false;
+    updateFollowReciterButton();
+  } else {
+    isUserFollowing = true;
+    followReciterBtn.hidden = true;
+  }
+}
+
+function onUserScrollGesture(): void {
+  if (isProgrammaticScrolling) return;
+
+  if (currentCaptureState === CaptureState.CAPTURING && currentMatchedAyah) {
+    requestAnimationFrame(() => {
+      checkActiveAyahVisibility();
+    });
+  }
+}
+
+function handleMatch(ayah: MatchedAyah | null): void {
+  currentMatchedAyah = ayah;
+
+  if (!ayah || currentCaptureState !== CaptureState.CAPTURING) {
+    listeningIndicator.hidden = currentCaptureState !== CaptureState.CAPTURING;
+    if (currentActiveAyahNumber !== null) {
+      const card = document.getElementById(`ayah-${currentActiveAyahNumber}`);
+      if (card) card.className = 'ayah-card ayah-card--context';
+      currentActiveAyahNumber = null;
+    }
+    followReciterBtn.hidden = true;
+    return;
+  }
+
+  listeningIndicator.hidden = true;
+
+  // Surah boundary transition
+  if (ayah.surah !== currentFeedSurah) {
+    if (isUserFollowing) {
+      currentFeedSurah = ayah.surah;
+      currentActiveAyahNumber = ayah.ayah;
+      followReciterBtn.hidden = true;
+      renderSurahFeed(ayah.surah, ayah.ayah);
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          scrollToAyah(ayah.ayah, false);
+        });
+      });
+    } else {
+      updateFollowReciterButton();
+    }
+    return;
+  }
+
+  // Same Surah progression
+  if (currentActiveAyahNumber !== ayah.ayah) {
+    if (currentActiveAyahNumber !== null) {
+      const oldCard = document.getElementById(`ayah-${currentActiveAyahNumber}`);
+      if (oldCard) oldCard.className = 'ayah-card ayah-card--context';
+    }
+
+    currentActiveAyahNumber = ayah.ayah;
+    const newCard = document.getElementById(`ayah-${ayah.ayah}`);
+    if (newCard) newCard.className = 'ayah-card ayah-card--active';
+
+    if (isUserFollowing) {
+      scrollToAyah(ayah.ayah, true);
+    } else {
+      updateFollowReciterButton();
+    }
+  } else if (!isUserFollowing) {
+    updateFollowReciterButton();
+  }
+}
+
+function onFollowReciterClick(): void {
+  if (currentMatchedAyah) {
+    const targetAyah = currentMatchedAyah.ayah;
+    const targetSurah = currentMatchedAyah.surah;
+    isUserFollowing = true;
+    followReciterBtn.hidden = true;
+    if (currentFeedSurah !== targetSurah) {
+      currentFeedSurah = targetSurah;
+      renderSurahFeed(currentFeedSurah, targetAyah);
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          scrollToAyah(targetAyah, false);
+        });
+      });
+    } else {
+      scrollToAyah(targetAyah, true);
+    }
   }
 }
 
@@ -205,10 +1036,25 @@ async function hydrateState(): Promise<void> {
     };
   }
 
-  updateUI(state);
   activeEditions = await loadActiveEditions(currentUserPreferences);
+
+  if (!isCorpusLoaded()) {
+    try {
+      const response = await fetch(browser.runtime.getURL('/data/quran.json'));
+      const corpusData = (await response.json()) as QuranVerseTuple[];
+      initCorpus(corpusData);
+    } catch (err) {
+      console.error('Failed to load local Quran corpus in sidepanel:', err);
+    }
+  }
+
   await updateToolbarControls();
-  renderAyah(currentMatchedAyah);
+
+  const initialSurah = currentMatchedAyah?.surah ?? 1;
+  const initialAyah = currentMatchedAyah?.ayah ?? null;
+  renderSurahFeed(initialSurah, initialAyah);
+
+  updateUI(state);
   handleTranscriptError(transcript ?? '');
 }
 
@@ -225,17 +1071,29 @@ async function handleToggle(): Promise<void> {
 
   try {
     if (state === CaptureState.CAPTURING) {
-      const response = (await browser.runtime.sendMessage({
-        type: MSG.STOP_CAPTURE,
-      })) as CaptureResponseMessage | undefined;
+      const response = (await Promise.race([
+        browser.runtime.sendMessage({
+          type: MSG.STOP_CAPTURE,
+        }),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('Stop request timed out')), 5000),
+        ),
+      ])) as CaptureResponseMessage | undefined;
 
       if (response?.type === MSG.ERROR) {
         console.error('Background returned error stopping capture:', response.payload);
       }
     } else if (state === CaptureState.IDLE) {
-      const response = (await browser.runtime.sendMessage({
-        type: MSG.START_CAPTURE,
-      })) as CaptureResponseMessage | undefined;
+      const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
+      const response = (await Promise.race([
+        browser.runtime.sendMessage({
+          type: MSG.START_CAPTURE,
+          payload: tab?.id ? { tabId: tab.id } : undefined,
+        }),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('Start request timed out')), 8000),
+        ),
+      ])) as CaptureResponseMessage | undefined;
 
       if (response?.type === MSG.ERROR) {
         console.error('Start capture failed:', response.payload);
@@ -249,13 +1107,15 @@ async function handleToggle(): Promise<void> {
         }
       } else {
         activeTabRequired = false;
+        isUserFollowing = true;
       }
     }
   } catch (err) {
     console.error('Error toggling capture:', err);
   } finally {
     isToggling = false;
-    await hydrateState();
+    const currentState = (await captureStateItem.getValue()) ?? CaptureState.IDLE;
+    updateUI(currentState);
   }
 }
 
@@ -272,163 +1132,31 @@ function updateUI(state: CaptureStateValue): void {
     toggleBtn.className = 'btn btn--danger';
     toggleBtn.textContent = browser.i18n.getMessage('stopCapture');
     toggleBtn.setAttribute('aria-busy', 'false');
+    listeningIndicator.hidden = currentMatchedAyah !== null;
   } else if (isTransitioning) {
     idleHint.hidden = true;
     toggleBtn.hidden = false;
     toggleBtn.disabled = true;
     toggleBtn.setAttribute('aria-busy', 'true');
+    listeningIndicator.hidden = false;
   } else {
     toggleBtn.setAttribute('aria-busy', 'false');
+    listeningIndicator.hidden = true;
+    followReciterBtn.hidden = true;
+    toggleBtn.hidden = false;
+    toggleBtn.disabled = isToggling;
+    toggleBtn.className = 'btn btn--primary';
+    toggleBtn.textContent = browser.i18n.getMessage('startCapture');
+
     if (activeTabRequired) {
       idleHint.hidden = false;
-      toggleBtn.hidden = true;
     } else {
       idleHint.hidden = true;
-      toggleBtn.hidden = false;
-      toggleBtn.disabled = isToggling;
-      toggleBtn.className = 'btn btn--primary';
-      toggleBtn.textContent = browser.i18n.getMessage('startCapture');
     }
   }
 
   statusEl.textContent = browser.i18n.getMessage(isCapturing ? 'statusCapturing' : 'statusIdle');
   statusEl.className = `status status--${state}`;
-}
-
-function createAyahNumberPill(ayahNumber: number, direction: 'ltr' | 'rtl' = 'ltr'): HTMLElement {
-  const pill = document.createElement('span');
-  pill.className = 'ayah-inline-num';
-
-  const bdi = document.createElement('bdi');
-  bdi.setAttribute('dir', direction);
-  if (direction === 'rtl') {
-    bdi.textContent = `(${toArabicNumerals(ayahNumber)})`;
-  } else {
-    bdi.textContent = `(${ayahNumber})`;
-  }
-
-  pill.appendChild(bdi);
-  return pill;
-}
-
-function renderAyah(ayah: MatchedAyah | null): void {
-  currentMatchedAyah = ayah;
-  const isCardVisible = Boolean(ayah && currentCaptureState === CaptureState.CAPTURING);
-
-  if (isCardVisible && ayah) {
-    if (placeholderView.hidden !== true) placeholderView.hidden = true;
-    if (ayahCard.hidden !== false) ayahCard.hidden = false;
-
-    const activeTransId =
-      currentUserPreferences.activeTranslationId !== undefined
-        ? currentUserPreferences.activeTranslationId
-        : (currentUserPreferences.activeTranslationIds?.[0] ?? null);
-
-    const showAr = currentUserPreferences.showArabic ?? true;
-    const newKey = `${ayah.surah}:${ayah.ayah}:${ayah.index}:${showAr}:${currentUserPreferences.showTransliteration}:${currentUserPreferences.activeTransliterationId}:${activeTransId ?? 'none'}`;
-    if (renderedAyahKey !== newKey) {
-      renderedAyahKey = newKey;
-
-      surahArabicEl.textContent = ayah.surahNameArabic
-        ? `سورة ${ayah.surahNameArabic}`
-        : `سورة ${ayah.surah}`;
-      surahEnglishEl.textContent = ayah.surahNameEnglish ?? '';
-
-      ayahBadgeEl.textContent = ayah.totalAyahs
-        ? `${ayah.surah}:${ayah.ayah} (${ayah.ayah}/${ayah.totalAyahs})`
-        : `${ayah.surah}:${ayah.ayah}`;
-
-      const isSajdahVerse = Boolean(ayah.isSajdah ?? isSajdah(ayah.surah, ayah.ayah));
-      sajdahBadgeEl.hidden = !isSajdahVerse;
-
-      if (showAr) {
-        ayahTextEl.hidden = false;
-        const marker = ayah.ayahMarker ? `\u00A0${ayah.ayahMarker}` : '';
-        ayahTextEl.textContent = `${ayah.uthmani}${marker}`.trim();
-      } else {
-        ayahTextEl.hidden = true;
-      }
-
-      let hasPrecedingContent = showAr;
-
-      if (
-        currentUserPreferences.showTransliteration &&
-        currentUserPreferences.activeTransliterationId
-      ) {
-        const translitEdition = activeEditions.get(currentUserPreferences.activeTransliterationId);
-        const text = translitEdition?.ayahs[ayah.index];
-        if (text) {
-          transliterationTextEl.textContent = text;
-          transliterationTextEl.appendChild(document.createTextNode(' '));
-          transliterationTextEl.appendChild(createAyahNumberPill(ayah.ayah, 'ltr'));
-          transliterationContainerEl.hidden = false;
-          transliterationContainerEl.style.borderTop = hasPrecedingContent ? '' : 'none';
-          transliterationContainerEl.style.paddingTop = hasPrecedingContent ? '' : '0';
-          hasPrecedingContent = true;
-        } else {
-          transliterationContainerEl.hidden = true;
-        }
-      } else {
-        transliterationContainerEl.hidden = true;
-      }
-
-      translationsContainerEl.innerHTML = '';
-      if (activeTransId) {
-        const edition = activeEditions.get(activeTransId);
-        if (edition) {
-          const text = edition.ayahs[ayah.index];
-          if (text) {
-            const block = document.createElement('div');
-            block.className = 'ayah-translation-block';
-            const direction = resolveEditionDirection(
-              edition.identifier,
-              edition.language,
-              edition.direction,
-            );
-            block.setAttribute('dir', direction);
-            if (!hasPrecedingContent) {
-              block.style.borderTop = 'none';
-              block.style.paddingTop = '0';
-            }
-
-            const label = document.createElement('span');
-            label.className = 'ayah-translation-label';
-
-            const bdi = document.createElement('bdi');
-            bdi.textContent = getLanguageEndonym(edition.language);
-            label.appendChild(bdi);
-
-            const p = document.createElement('p');
-            p.className = 'ayah-translation-text';
-            p.textContent = text;
-            p.appendChild(document.createTextNode(' '));
-            p.appendChild(createAyahNumberPill(ayah.ayah, direction));
-
-            block.appendChild(label);
-            block.appendChild(p);
-            translationsContainerEl.appendChild(block);
-          }
-        }
-      }
-    }
-  } else {
-    renderedAyahKey = '';
-    if (ayahCard.hidden !== true) ayahCard.hidden = true;
-    if (placeholderView.hidden !== false) placeholderView.hidden = false;
-
-    const isListening =
-      currentCaptureState === CaptureState.CAPTURING ||
-      currentCaptureState === CaptureState.STARTING;
-    const msgKey: I18nKey = isListening ? 'listeningForRecitation' : 'readyToListen';
-    const nextText = browser.i18n.getMessage(msgKey);
-
-    if (placeholderText.textContent !== nextText) {
-      placeholderText.textContent = nextText;
-    }
-    if (listeningIndicator.hidden !== !isListening) {
-      listeningIndicator.hidden = !isListening;
-    }
-  }
 }
 
 function handleTranscriptError(text: string): void {
@@ -518,8 +1246,7 @@ async function onArabicToggle(): Promise<void> {
 
   await userPreferencesItem.setValue(currentUserPreferences);
   await updateToolbarControls();
-  renderedAyahKey = '';
-  renderAyah(currentMatchedAyah);
+  renderSurahFeed(currentFeedSurah, currentActiveAyahNumber);
 }
 
 async function onTranslitToggle(): Promise<void> {
@@ -664,8 +1391,7 @@ function createEditionItem(edition: EditionMetadata, cachedIds: Set<string>): HT
           showTransliteration: true,
         };
         await userPreferencesItem.setValue(currentUserPreferences);
-        renderedAyahKey = '';
-        renderAyah(currentMatchedAyah);
+        renderSurahFeed(currentFeedSurah, currentActiveAyahNumber);
         await updateToolbarControls();
         await renderSettings();
       }
@@ -753,32 +1479,30 @@ async function selectTranslation(id: string | null): Promise<void> {
   }
 
   await userPreferencesItem.setValue(currentUserPreferences);
-  renderedAyahKey = '';
-  renderAyah(currentMatchedAyah);
+  renderSurahFeed(currentFeedSurah, currentActiveAyahNumber);
   await updateToolbarControls();
   await renderSettings();
 }
 
 async function downloadEdition(id: string): Promise<void> {
   downloadingEditions.add(id);
-  await updateToolbarControls();
   await renderSettings();
 
   try {
-    const downloaded = await fetchAndCacheEdition(id);
-    activeEditions.set(id, downloaded);
+    const edition = await fetchAndCacheEdition(id);
+    activeEditions.set(id, edition);
 
-    const editionMeta = CURATED_EDITIONS.find((e) => e.identifier === id);
-    if (editionMeta?.type === 'translation') {
-      if (!currentUserPreferences.activeTranslationId) {
-        await selectTranslation(id);
-      }
-    } else if (editionMeta?.type === 'transliteration') {
-      currentUserPreferences.activeTransliterationId = id;
-      currentUserPreferences.showTransliteration = true;
+    if (edition.type === 'translation') {
+      await selectTranslation(id);
+    } else if (edition.type === 'transliteration') {
+      currentUserPreferences = {
+        ...currentUserPreferences,
+        activeTransliterationId: id,
+        showTransliteration: true,
+      };
       await userPreferencesItem.setValue(currentUserPreferences);
-      renderedAyahKey = '';
-      renderAyah(currentMatchedAyah);
+      renderSurahFeed(currentFeedSurah, currentActiveAyahNumber);
+      await updateToolbarControls();
     }
   } catch (err) {
     console.error(`Failed to download edition ${id}:`, err);
@@ -820,8 +1544,7 @@ async function removeEdition(id: string): Promise<void> {
     };
 
     await userPreferencesItem.setValue(currentUserPreferences);
-    renderedAyahKey = '';
-    renderAyah(currentMatchedAyah);
+    renderSurahFeed(currentFeedSurah, currentActiveAyahNumber);
     await updateToolbarControls();
     await renderSettings();
   } catch (err) {
@@ -879,8 +1602,7 @@ async function handleTransliterationToggle(enable: boolean): Promise<void> {
   }
 
   await userPreferencesItem.setValue(currentUserPreferences);
-  renderedAyahKey = '';
-  renderAyah(currentMatchedAyah);
+  renderSurahFeed(currentFeedSurah, currentActiveAyahNumber);
   await updateToolbarControls();
   await renderSettings();
 }
@@ -902,7 +1624,7 @@ function onDialogClick(e: MouseEvent): void {
 
 async function onOnline(): Promise<void> {
   activeEditions = await loadActiveEditions(currentUserPreferences);
-  renderAyah(currentMatchedAyah);
+  renderSurahFeed(currentFeedSurah, currentActiveAyahNumber);
   await updateToolbarControls();
   await renderSettings();
 }
@@ -917,20 +1639,40 @@ async function init(): Promise<void> {
   toggleArabicBtn.addEventListener('click', onArabicToggle);
   toggleTranslitBtn.addEventListener('click', onTranslitToggle);
   translationSelectEl.addEventListener('change', onTranslationChange);
+  followReciterBtn.addEventListener('click', onFollowReciterClick);
+
+  surahPickerTrigger.addEventListener('click', openSurahPicker);
+  surahPickerCloseBtn.addEventListener('click', closeSurahPicker);
+  surahPickerDialog.addEventListener('click', onSurahPickerBackdropClick);
+  surahSearchInput.addEventListener('input', onSurahSearchInput);
+  surahSearchInput.addEventListener('keydown', onSurahKeyNavigation);
+  surahPickerList.addEventListener('click', onSurahPickerListClick);
+  surahFilterPills.forEach((pill) => {
+    pill.addEventListener('click', onFilterPillClick);
+  });
+  window.addEventListener('keydown', onGlobalKeyDown);
+
+  surahFeedEl.addEventListener('wheel', onUserScrollGesture, { passive: true });
+  surahFeedEl.addEventListener('touchstart', onUserScrollGesture, { passive: true });
+  surahFeedEl.addEventListener('pointerdown', onUserScrollGesture, { passive: true });
+  surahFeedEl.addEventListener('keydown', onUserScrollGesture, { passive: true });
+
   settingsBtn.addEventListener('click', onSettingsOpen);
   settingsCloseBtn.addEventListener('click', onSettingsClose);
   settingsDialog.addEventListener('click', onDialogClick);
   window.addEventListener('online', onOnline);
   window.addEventListener('beforeunload', cleanup);
 
+  // Hydrate local corpus and state before listening to external mutations
+  await hydrateState();
+
   unwatchState = captureStateItem.watch((newState: CaptureStateValue | null) => {
     const s = newState ?? CaptureState.IDLE;
     updateUI(s);
-    renderAyah(currentMatchedAyah);
   });
 
   unwatchMatchedAyah = matchedAyahItem.watch((newAyah: MatchedAyah | null) => {
-    renderAyah(newAyah);
+    handleMatch(newAyah);
   });
 
   unwatchTranscript = transcriptItem.watch((newTranscript: string | null) => {
@@ -949,14 +1691,12 @@ async function init(): Promise<void> {
       };
       loadActiveEditions(currentUserPreferences).then((editions) => {
         activeEditions = editions;
-        renderAyah(currentMatchedAyah);
+        renderSurahFeed(currentFeedSurah, currentActiveAyahNumber);
         void updateToolbarControls();
         void renderSettings();
       });
     }
   });
-
-  await hydrateState();
 }
 
 function cleanup(): void {
@@ -981,6 +1721,24 @@ function cleanup(): void {
   toggleArabicBtn?.removeEventListener('click', onArabicToggle);
   toggleTranslitBtn?.removeEventListener('click', onTranslitToggle);
   translationSelectEl?.removeEventListener('change', onTranslationChange);
+  followReciterBtn?.removeEventListener('click', onFollowReciterClick);
+
+  surahPickerTrigger?.removeEventListener('click', openSurahPicker);
+  surahPickerCloseBtn?.removeEventListener('click', closeSurahPicker);
+  surahPickerDialog?.removeEventListener('click', onSurahPickerBackdropClick);
+  surahSearchInput?.removeEventListener('input', onSurahSearchInput);
+  surahSearchInput?.removeEventListener('keydown', onSurahKeyNavigation);
+  surahPickerList?.removeEventListener('click', onSurahPickerListClick);
+  surahFilterPills?.forEach((pill) => {
+    pill.removeEventListener('click', onFilterPillClick);
+  });
+  window.removeEventListener('keydown', onGlobalKeyDown);
+
+  surahFeedEl?.removeEventListener('wheel', onUserScrollGesture);
+  surahFeedEl?.removeEventListener('touchstart', onUserScrollGesture);
+  surahFeedEl?.removeEventListener('pointerdown', onUserScrollGesture);
+  surahFeedEl?.removeEventListener('keydown', onUserScrollGesture);
+
   settingsBtn?.removeEventListener('click', onSettingsOpen);
   settingsCloseBtn?.removeEventListener('click', onSettingsClose);
   settingsDialog?.removeEventListener('click', onDialogClick);

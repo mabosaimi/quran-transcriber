@@ -9,5 +9,14 @@ export default defineConfig({
     host_permissions: ['https://api.alquran.cloud/*'],
     minimum_chrome_version: '116',
     action: {},
+    commands: {
+      'toggle-capture': {
+        suggested_key: {
+          default: 'Alt+Shift+L',
+          mac: 'Alt+Shift+L',
+        },
+        description: 'Toggle Quran audio transcription on active tab',
+      },
+    },
   },
 });

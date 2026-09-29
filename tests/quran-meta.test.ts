@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest';
 import {
   formatAyahMarker,
   getSurahMeta,
+  isMedinan,
   isSajdah,
+  MEDINAN_SURAHS,
   SAJDAH_AYAHS,
   SURAHS,
   toArabicNumerals,
@@ -28,6 +30,7 @@ describe('quran-meta', () => {
         nameArabic: 'الفاتحة',
         nameEnglish: 'Al-Fatihah',
         totalAyahs: 7,
+        revelation: 'meccan',
       });
 
       const nas = getSurahMeta(114);
@@ -36,7 +39,11 @@ describe('quran-meta', () => {
         nameArabic: 'الناس',
         nameEnglish: 'An-Nas',
         totalAyahs: 6,
+        revelation: 'meccan',
       });
+
+      const baqarah = getSurahMeta(2);
+      expect(baqarah?.revelation).toBe('medinan');
     });
 
     it('returns undefined for invalid or out-of-range Surah numbers', () => {
@@ -97,6 +104,27 @@ describe('quran-meta', () => {
       expect(isSajdah(1, 1)).toBe(false);
       expect(isSajdah(2, 255)).toBe(false);
       expect(isSajdah(114, 6)).toBe(false);
+    });
+  });
+
+  describe('revelation classification', () => {
+    it('contains exactly 28 Medinan Surahs and 86 Meccan Surahs', () => {
+      expect(MEDINAN_SURAHS.size).toBe(28);
+      const medinanCount = SURAHS.filter((s) => s.revelation === 'medinan').length;
+      const meccanCount = SURAHS.filter((s) => s.revelation === 'meccan').length;
+      expect(medinanCount).toBe(28);
+      expect(meccanCount).toBe(86);
+      expect(medinanCount + meccanCount).toBe(114);
+    });
+
+    it('correctly classifies prominent Surahs', () => {
+      expect(isMedinan(1)).toBe(false); // Al-Fatihah
+      expect(isMedinan(2)).toBe(true);  // Al-Baqarah
+      expect(isMedinan(3)).toBe(true);  // Ali 'Imran
+      expect(isMedinan(36)).toBe(false); // Ya-Sin
+      expect(isMedinan(67)).toBe(false); // Al-Mulk
+      expect(isMedinan(110)).toBe(true); // An-Nasr
+      expect(isMedinan(114)).toBe(false); // An-Nas
     });
   });
 });

@@ -16,6 +16,7 @@ export type MessageType = (typeof MSG)[keyof typeof MSG];
 
 export interface StartCaptureMessage {
   type: typeof MSG.START_CAPTURE;
+  payload?: { tabId?: number };
 }
 
 export interface StopCaptureMessage {

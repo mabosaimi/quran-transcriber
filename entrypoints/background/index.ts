@@ -16,43 +16,27 @@ export default defineBackground(() => {
     console.warn('Initial state reconciliation error:', err);
   });
 
+  // Support keyboard shortcut command for toggle capture (valid user gesture for activeTab)
+  browser.commands?.onCommand?.addListener(async (command) => {
+    if (command === 'toggle-capture') {
+      const currentState = await captureStateItem.getValue();
+      if (currentState === CaptureState.CAPTURING) {
+        await handleStopCapture();
+      } else if (currentState === CaptureState.IDLE) {
+        const [tab] = await browser.tabs.query({ active: true, lastFocusedWindow: true });
+        await handleStartCapture(tab?.id).catch((err) => {
+          console.warn('Command toggle capture failed:', err);
+        });
+      }
+    }
+  });
+
   browser.action.onClicked.addListener(async (tab) => {
-    // Preserve the user gesture token synchronously before any await boundary
+    // Preserve the user gesture token synchronously before any await boundary to open sidepanel
     if (tab.windowId !== undefined) {
       browser.sidePanel.open({ windowId: tab.windowId }).catch((err) => {
         console.warn('Non-fatal sidePanel.open error:', err);
       });
-    }
-
-    let currentState = await captureStateItem.getValue();
-
-    if (currentState !== CaptureState.IDLE) {
-      const offscreenExists = await hasOffscreenDocument();
-      if (!offscreenExists) {
-        await handleStopCapture({ notifyOffscreen: false });
-        currentState = CaptureState.IDLE;
-      }
-    }
-
-    if (currentState === CaptureState.STARTING || currentState === CaptureState.STOPPING) {
-      return;
-    }
-
-    if (currentState === CaptureState.CAPTURING) {
-      await handleStopCapture();
-      return;
-    }
-
-    try {
-      if (tab.id !== undefined) {
-        await handleStartCapture(tab.id);
-      }
-    } catch (err) {
-      console.error('Failed to initialize capture from action click:', err);
-      await captureStateItem.setValue(CaptureState.IDLE);
-      await updateBadge(CaptureState.IDLE);
-      await matchedAyahItem.setValue(null);
-      await transcriptItem.setValue(`Error: ${(err as Error).message}`);
     }
   });
 
@@ -75,10 +59,16 @@ export default defineBackground(() => {
     if (!isExtensionMessage(message)) return;
 
     if (message.type === MSG.START_CAPTURE) {
-      handleStartCapture()
+      const explicitTabId =
+        typeof message.payload === 'object' &&
+        message.payload !== null &&
+        'tabId' in message.payload
+          ? (message.payload as { tabId?: number }).tabId
+          : undefined;
+      handleStartCapture(explicitTabId)
         .then(sendResponse)
         .catch((err: Error) => {
-          console.error('Capture Start Error:', err);
+          console.warn('Capture Start Error:', err);
           captureStateItem.setValue(CaptureState.IDLE);
           updateBadge(CaptureState.IDLE);
           matchedAyahItem.setValue(null);
@@ -163,6 +153,10 @@ export default defineBackground(() => {
       let targetTabId = explicitTabId;
       if (!targetTabId) {
         const [tab] = await browser.tabs.query({ active: true, lastFocusedWindow: true });
+        targetTabId = tab?.id;
+      }
+      if (!targetTabId) {
+        const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
         targetTabId = tab?.id;
       }
 

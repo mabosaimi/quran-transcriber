@@ -1,8 +1,20 @@
+export type RevelationType = 'meccan' | 'medinan';
+
 export interface SurahMeta {
   readonly number: number;
   readonly nameArabic: string;
   readonly nameEnglish: string;
   readonly totalAyahs: number;
+  readonly revelation: RevelationType;
+}
+
+export const MEDINAN_SURAHS: ReadonlySet<number> = new Set([
+  2, 3, 4, 5, 8, 9, 13, 22, 24, 33, 47, 48, 49, 55, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 76, 98,
+  99, 110,
+]);
+
+export function isMedinan(surahNumber: number): boolean {
+  return MEDINAN_SURAHS.has(surahNumber);
 }
 
 type SurahTuple = readonly [nameArabic: string, nameEnglish: string, totalAyahs: number];
@@ -125,13 +137,16 @@ const SURAH_TUPLES: readonly SurahTuple[] = [
 ];
 
 export const SURAHS: readonly SurahMeta[] = SURAH_TUPLES.map(
-  ([nameArabic, nameEnglish, totalAyahs], idx) =>
-    Object.freeze({
-      number: idx + 1,
+  ([nameArabic, nameEnglish, totalAyahs], idx) => {
+    const number = idx + 1;
+    return Object.freeze({
+      number,
       nameArabic,
       nameEnglish,
       totalAyahs,
-    }),
+      revelation: isMedinan(number) ? 'medinan' : 'meccan',
+    });
+  },
 );
 
 export function getSurahMeta(surahNumber: number): SurahMeta | undefined {

@@ -258,8 +258,8 @@ function startRecognition(sessionId: number, audioTrack?: MediaStreamTrack): voi
   recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
     if (sessionId !== currentSessionId) return;
 
-    // Ignore silence pauses between verses and let onend handle reconnection
-    if (event.error === 'aborted' || event.error === 'no-speech') {
+    // Ignore silence pauses and transient network reconnects; let onend handle reconnection
+    if (event.error === 'aborted' || event.error === 'no-speech' || event.error === 'network') {
       return;
     }
 

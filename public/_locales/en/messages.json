@@ -28,8 +28,8 @@
     "description": "Placeholder text in the transcript area"
   },
   "clickIconToStart": {
-    "message": "Click the extension icon in the browser toolbar to start listening to the active tab.",
-    "description": "Instruction shown in the side panel when idle"
+    "message": "Click the extension icon in the toolbar or press Alt+Shift+L on the tab you want to listen to.",
+    "description": "Instruction shown in the side panel when tab invocation is required"
   },
   "listeningForRecitation": {
     "message": "Listening for recitation...",
@@ -146,5 +146,62 @@
   "phoneticScript": {
     "message": "Phonetic Latin script",
     "description": "Description for transliteration edition"
+  },
+  "followReciter": {
+    "message": "Follow Reciter",
+    "description": "Button to snap back to active reciter"
+  },
+  "searchSurahPlaceholder": {
+    "message": "Search surah, number, or ayah (e.g. 18, Kahf, 18:10)...",
+    "description": "Placeholder for surah search input"
+  },
+  "changeSurah": {
+    "message": "Change Surah",
+    "description": "Tooltip and accessible title for the surah switcher trigger"
+  },
+  "allSurahs": {
+    "message": "All",
+    "description": "Filter tab for all surahs"
+  },
+  "meccan": {
+    "message": "Meccan",
+    "description": "Label indicating a Meccan surah"
+  },
+  "medinan": {
+    "message": "Medinan",
+    "description": "Label indicating a Medinan surah"
+  },
+  "versesCount": {
+    "message": "$COUNT$ verses",
+    "description": "Formatted verse count string",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "7"
+      }
+    }
+  },
+  "jumpToAyah": {
+    "message": "Jump to $SURAH$, Ayah $AYAH$",
+    "description": "Label for direct ayah jump search result",
+    "placeholders": {
+      "surah": {
+        "content": "$1",
+        "example": "Al-Kahf"
+      },
+      "ayah": {
+        "content": "$2",
+        "example": "10"
+      }
+    }
+  },
+  "noSurahsFound": {
+    "message": "No matching surahs found",
+    "description": "Empty state text when search filter matches nothing"
+  },
+  "surahNavigation": {
+    "message": "Surah Navigation",
+    "description": "Title for the surah picker dialog"
   }
 }
+

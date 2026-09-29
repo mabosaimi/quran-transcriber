@@ -28,8 +28,8 @@
     "description": "نص مؤقت في منطقة النسخ"
   },
   "clickIconToStart": {
-    "message": "انقر على أيقونة الإضافة في شريط أدوات المتصفح لبدء الاستماع إلى الصفحة النشطة.",
-    "description": "إرشاد يظهر في اللوحة الجانبية عند عدم الاستماع"
+    "message": "انقر على أيقونة الإضافة في شريط الأدوات أو اضغط Alt+Shift+L على التبويب المطلوب للاستماع.",
+    "description": "إرشاد يظهر في اللوحة الجانبية عند الحاجة لتحديد التبويب"
   },
   "listeningForRecitation": {
     "message": "جارٍ الاستماع للتلاوة...",
@@ -146,5 +146,62 @@
   "phoneticScript": {
     "message": "نطق الكلمات بالأحرف اللاتينية",
     "description": "وصف طبعة الحرفية"
+  },
+  "followReciter": {
+    "message": "متابعة القارئ",
+    "description": "زر للعودة إلى موضع القراءة الحالي"
+  },
+  "searchSurahPlaceholder": {
+    "message": "ابحث باسم السورة، رقمها، أو آية (مثلاً: الكهف، 18، 18:10)...",
+    "description": "نص العنصر النائب لحقل بحث السور"
+  },
+  "changeSurah": {
+    "message": "تغيير السورة",
+    "description": "تلميح زر تغيير السورة"
+  },
+  "allSurahs": {
+    "message": "الكل",
+    "description": "تبويب تصفية كل السور"
+  },
+  "meccan": {
+    "message": "مكية",
+    "description": "تصنيف السورة المكية"
+  },
+  "medinan": {
+    "message": "مدنية",
+    "description": "تصنيف السورة المدنية"
+  },
+  "versesCount": {
+    "message": "$COUNT$ آيات",
+    "description": "عدد الآيات",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "7"
+      }
+    }
+  },
+  "jumpToAyah": {
+    "message": "الانتقال إلى سورة $SURAH$، آية $AYAH$",
+    "description": "الانتقال المباشر إلى آية محددة",
+    "placeholders": {
+      "surah": {
+        "content": "$1",
+        "example": "الكهف"
+      },
+      "ayah": {
+        "content": "$2",
+        "example": "10"
+      }
+    }
+  },
+  "noSurahsFound": {
+    "message": "لم يتم العثور على سور مطابقة",
+    "description": "رسالة عدم وجود نتائج للبحث"
+  },
+  "surahNavigation": {
+    "message": "فهرس السور",
+    "description": "عنوان نافذة اختيار السور"
   }
 }
+

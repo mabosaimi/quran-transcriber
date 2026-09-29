@@ -38,49 +38,48 @@
         </div>
       </nav>
 
+      <div class="surah-bar">
+        <button id="surah-picker-trigger" class="surah-trigger-btn" type="button" aria-haspopup="dialog" aria-expanded="false" data-i18n-title="changeSurah" title="Change Surah">
+          <div class="surah-trigger-btn__lead">
+            <span id="surah-trigger-number" class="surah-trigger-btn__badge">1</span>
+            <div class="surah-trigger-btn__titles">
+              <span id="surah-trigger-name" class="surah-trigger-btn__name">Al-Fatihah</span>
+              <span id="surah-trigger-count" class="surah-trigger-btn__count">7 verses</span>
+            </div>
+          </div>
+          <div class="surah-trigger-btn__trail">
+            <span id="surah-trigger-arabic" class="surah-trigger-btn__arabic">الفاتحة</span>
+            <svg class="surah-trigger-btn__chevron" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="m6 9 6 6 6-6"/>
+            </svg>
+          </div>
+        </button>
+      </div>
+
       <main class="main">
         <div id="error-banner" class="error-banner" hidden role="alert"></div>
 
-        <div id="placeholder-view" class="placeholder-view">
-          <div class="placeholder-icon">
-            <svg class="icon-quran" viewBox="0 0 24 24" width="44" height="44" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1-2.5-2.5Z"/>
-              <path d="M6 6h10"/>
-              <path d="M6 10h10"/>
-              <path d="M6 14h6"/>
-            </svg>
-          </div>
-          <p id="placeholder-text" class="placeholder-text" data-i18n="readyToListen">Play Quran recitation in any tab and click Start Listening.</p>
-          <div id="listening-indicator" class="listening-wave" hidden>
+        <div id="listening-indicator" class="listening-banner" hidden role="status" aria-live="polite">
+          <div class="listening-wave">
             <span></span>
             <span></span>
             <span></span>
             <span></span>
           </div>
+          <span class="listening-banner__text" data-i18n="listeningForRecitation">Listening for recitation...</span>
         </div>
 
-        <article id="ayah-card" class="ayah-card" hidden aria-live="polite">
-          <header class="ayah-card__header">
-            <div class="ayah-card__surah-info">
-              <span id="surah-arabic" class="ayah-card__surah-arabic" dir="rtl" lang="ar"></span>
-              <span id="surah-english" class="ayah-card__surah-english"></span>
-            </div>
-            <div class="ayah-card__badges">
-              <span id="sajdah-badge" class="ayah-card__sajdah-badge" hidden>
-                <bdi>۩ <span data-i18n="sajdahBadge">Sajdah</span></bdi>
-              </span>
-              <div id="ayah-badge" class="ayah-card__badge" dir="ltr"></div>
-            </div>
-          </header>
+        <div class="surah-feed-container">
+          <div id="surah-feed" class="surah-feed" role="feed" aria-busy="false"></div>
 
-          <div class="ayah-card__body">
-            <p id="ayah-text" class="ayah-card__text" dir="rtl" lang="ar"></p>
-            <div id="transliteration-container" class="ayah-card__transliteration" hidden>
-              <p id="transliteration-text" class="ayah-card__transliteration-text" dir="ltr"></p>
-            </div>
-            <div id="translations-container" class="ayah-card__translations"></div>
-          </div>
-        </article>
+          <button id="follow-reciter-btn" class="follow-pill" type="button" aria-label="Follow Reciter" hidden>
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <circle cx="12" cy="12" r="9"/>
+              <circle cx="12" cy="12" r="3" fill="currentColor"/>
+            </svg>
+            <span id="follow-reciter-text" data-i18n="followReciter">Follow Reciter</span>
+          </button>
+        </div>
       </main>
 
       <footer class="footer">
@@ -111,6 +110,38 @@
             <p class="settings-section__hint" data-i18n="downloadHint">Download translations for offline use. Once downloaded, choose them directly from the toolbar.</p>
             <div id="editions-list" class="settings-editions-list"></div>
           </section>
+        </div>
+      </div>
+    </dialog>
+
+    <dialog id="surah-picker-dialog" class="surah-dialog" aria-label="Surah Navigation">
+      <div class="surah-dialog__content">
+        <header class="surah-dialog__header">
+          <div class="surah-search-wrap">
+            <svg class="surah-search-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <circle cx="11" cy="11" r="8"/>
+              <path d="m21 21-4.3-4.3"/>
+            </svg>
+            <input id="surah-search-input" class="surah-search-input" type="search" data-i18n-placeholder="searchSurahPlaceholder" placeholder="Search surah, number, or ayah (e.g. 18, Kahf, 18:10)..." autocomplete="off" spellcheck="false" aria-label="Search Surahs" />
+          </div>
+          <button id="surah-picker-close-btn" class="icon-btn" type="button" aria-label="Close" data-i18n-title="close" title="Close">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <line x1="18" y1="6" x2="6" y2="18"/>
+              <line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
+        </header>
+
+        <div class="surah-dialog__filters">
+          <button class="surah-filter-pill surah-filter-pill--active" type="button" data-filter="all" data-i18n="allSurahs">All</button>
+          <button class="surah-filter-pill" type="button" data-filter="meccan" data-i18n="meccan">Meccan</button>
+          <button class="surah-filter-pill" type="button" data-filter="medinan" data-i18n="medinan">Medinan</button>
+        </div>
+
+        <div id="surah-picker-list" class="surah-picker-list" role="listbox" aria-label="Surahs"></div>
+
+        <div id="surah-picker-empty" class="surah-picker-empty" hidden>
+          <p data-i18n="noSurahsFound">No matching surahs found</p>
         </div>
       </div>
     </dialog>
