@@ -1,10 +1,12 @@
 import {
   CURATED_EDITIONS,
+  DEFAULT_TAFSIR_ID,
   DEFAULT_TRANSLITERATION_ID,
   deleteCachedEdition,
   type EditionMetadata,
   fetchAndCacheEdition,
   formatEditionAuthors,
+  getAvailableTafsirs,
   getAvailableTranslations,
   getAvailableTransliterations,
   getCachedEdition,
@@ -92,6 +94,7 @@ let followReciterTextEl: HTMLElement;
 
 let toggleArabicBtn: HTMLButtonElement;
 let toggleTranslitBtn: HTMLButtonElement;
+let toggleTafsirBtn: HTMLButtonElement;
 let translationSelectEl: HTMLSelectElement;
 
 let settingsBtn: HTMLButtonElement;
@@ -115,6 +118,8 @@ let currentUserPreferences: UserEditionPreferences = {
   activeTranslationIds: [],
   showTransliteration: false,
   activeTransliterationId: DEFAULT_TRANSLITERATION_ID,
+  showTafsir: false,
+  activeTafsirId: null,
 };
 const downloadingEditions = new Set<string>();
 
@@ -149,6 +154,7 @@ function queryDOMElements(): boolean {
 
   const tArabicBtn = document.getElementById('toggle-arabic-btn') as HTMLButtonElement | null;
   const tTranslitBtn = document.getElementById('toggle-translit-btn') as HTMLButtonElement | null;
+  const tTafsirBtn = document.getElementById('toggle-tafsir-btn') as HTMLButtonElement | null;
   const tSelect = document.getElementById('translation-select') as HTMLSelectElement | null;
 
   const sBtn = document.getElementById('settings-btn') as HTMLButtonElement | null;
@@ -179,6 +185,7 @@ function queryDOMElements(): boolean {
     !fTxt ||
     !tArabicBtn ||
     !tTranslitBtn ||
+    !tTafsirBtn ||
     !tSelect ||
     !sBtn ||
     !sSettingsDialog ||
@@ -214,6 +221,7 @@ function queryDOMElements(): boolean {
 
   toggleArabicBtn = tArabicBtn;
   toggleTranslitBtn = tTranslitBtn;
+  toggleTafsirBtn = tTafsirBtn;
   translationSelectEl = tSelect;
 
   settingsBtn = sBtn;
@@ -581,7 +589,7 @@ function selectSurahAndAyah(surahNumber: number, ayahNumber: number | null): voi
       const targetAyah = currentMatchedAyah.ayah;
       isUserFollowing = true;
       followReciterBtn.hidden = true;
-      renderSurahFeed(surahNumber, targetAyah);
+      renderSurahFeed(surahNumber, targetAyah, true);
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
           scrollToAyah(targetAyah, false);
@@ -589,7 +597,7 @@ function selectSurahAndAyah(surahNumber: number, ayahNumber: number | null): voi
       });
     } else {
       isUserFollowing = false;
-      renderSurahFeed(surahNumber, ayahNumber);
+      renderSurahFeed(surahNumber, ayahNumber, true);
       if (ayahNumber) {
         requestAnimationFrame(() => {
           requestAnimationFrame(() => {
@@ -600,7 +608,7 @@ function selectSurahAndAyah(surahNumber: number, ayahNumber: number | null): voi
       updateFollowReciterButton();
     }
   } else {
-    renderSurahFeed(surahNumber, ayahNumber);
+    renderSurahFeed(surahNumber, ayahNumber, true);
     if (ayahNumber) {
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
@@ -649,14 +657,195 @@ function createAyahNumberPill(ayahNumber: number, direction: 'ltr' | 'rtl' = 'lt
   return pill;
 }
 
-function renderSurahFeed(surahNumber: number, activeAyah: number | null): void {
+function buildCardBody(
+  ayah: CorpusAyah,
+  showAr: boolean,
+  activeTransId: string | null,
+): HTMLElement {
+  const body = document.createElement('div');
+  body.className = 'ayah-card__body';
+
+  let hasPrecedingContent = showAr;
+
+  if (showAr) {
+    const p = document.createElement('p');
+    p.className = 'ayah-card__text';
+    p.setAttribute('dir', 'rtl');
+    p.setAttribute('lang', 'ar');
+    p.textContent = `${ayah.uthmani}\u00A0${ayah.ayahMarker}`.trim();
+    body.appendChild(p);
+  }
+
+  if (
+    currentUserPreferences.showTransliteration &&
+    currentUserPreferences.activeTransliterationId
+  ) {
+    const translitEdition = activeEditions.get(currentUserPreferences.activeTransliterationId);
+    const text = translitEdition?.ayahs[ayah.index];
+    if (text) {
+      const translitContainer = document.createElement('div');
+      translitContainer.className = 'ayah-card__transliteration';
+      translitContainer.setAttribute('dir', 'ltr');
+      if (!hasPrecedingContent) {
+        translitContainer.style.borderTop = 'none';
+        translitContainer.style.paddingTop = '0';
+      }
+
+      const translitP = document.createElement('p');
+      translitP.className = 'ayah-card__transliteration-text';
+      translitP.textContent = text;
+      translitP.appendChild(document.createTextNode(' '));
+      translitP.appendChild(createAyahNumberPill(ayah.ayah, 'ltr'));
+
+      translitContainer.appendChild(translitP);
+      body.appendChild(translitContainer);
+      hasPrecedingContent = true;
+    }
+  }
+
+  if (activeTransId) {
+    const edition = activeEditions.get(activeTransId);
+    if (edition) {
+      const text = edition.ayahs[ayah.index];
+      if (text) {
+        const transContainer = document.createElement('div');
+        transContainer.className = 'ayah-card__translations';
+
+        const block = document.createElement('div');
+        block.className = 'ayah-translation-block';
+        const direction = resolveEditionDirection(
+          edition.identifier,
+          edition.language,
+          edition.direction,
+        );
+        block.setAttribute('dir', direction);
+        if (!hasPrecedingContent) {
+          block.style.borderTop = 'none';
+          block.style.paddingTop = '0';
+        }
+
+        const label = document.createElement('span');
+        label.className = 'ayah-translation-label';
+        const labelBdi = document.createElement('bdi');
+        labelBdi.textContent = getLanguageEndonym(edition.language);
+        label.appendChild(labelBdi);
+
+        const p = document.createElement('p');
+        p.className = 'ayah-translation-text';
+        p.textContent = text;
+        p.appendChild(document.createTextNode(' '));
+        p.appendChild(createAyahNumberPill(ayah.ayah, direction));
+
+        block.appendChild(label);
+        block.appendChild(p);
+        transContainer.appendChild(block);
+        body.appendChild(transContainer);
+      }
+    }
+  }
+
+  if (currentUserPreferences.showTafsir && currentUserPreferences.activeTafsirId) {
+    const tafsirEdition = activeEditions.get(currentUserPreferences.activeTafsirId);
+    const tafsirText = tafsirEdition?.ayahs[ayah.index];
+    if (tafsirText) {
+      const tafsirBlock = document.createElement('div');
+      tafsirBlock.className = 'ayah-tafsir-block';
+      const direction = resolveEditionDirection(
+        tafsirEdition.identifier,
+        tafsirEdition.language,
+        tafsirEdition.direction,
+      );
+      tafsirBlock.setAttribute('dir', direction);
+      tafsirBlock.setAttribute('lang', tafsirEdition.language ?? 'ar');
+
+      const labelRow = document.createElement('div');
+      labelRow.className = 'ayah-tafsir-header';
+
+      const label = document.createElement('span');
+      label.className = 'ayah-tafsir-label';
+      const labelBdi = document.createElement('bdi');
+      labelBdi.textContent = tafsirEdition.name;
+      label.appendChild(labelBdi);
+      labelRow.appendChild(label);
+
+      const p = document.createElement('p');
+      p.className = 'ayah-tafsir-text';
+      p.textContent = tafsirText;
+
+      tafsirBlock.appendChild(labelRow);
+      tafsirBlock.appendChild(p);
+      body.appendChild(tafsirBlock);
+    }
+  }
+
+  return body;
+}
+
+function renderSurahFeed(
+  surahNumber: number,
+  activeAyah: number | null,
+  forceResetScroll = false,
+): void {
+  const isSameSurah = surahNumber === currentFeedSurah;
   currentFeedSurah = surahNumber;
   currentActiveAyahNumber = activeAyah;
   updateSurahTrigger(surahNumber);
-  surahFeedEl.innerHTML = '';
 
   const meta = SURAHS[surahNumber - 1];
   if (!meta) return;
+
+  const verses = getSurahVerses(surahNumber);
+  const showAr = currentUserPreferences.showArabic ?? true;
+  const activeTransId =
+    currentUserPreferences.activeTranslationId !== undefined
+      ? currentUserPreferences.activeTranslationId
+      : (currentUserPreferences.activeTranslationIds?.[0] ?? null);
+
+  const existingCards = surahFeedEl.querySelectorAll<HTMLElement>('.ayah-card');
+
+  // Update card bodies in-place to preserve scroll position and avoid layout shifts
+  if (!forceResetScroll && isSameSurah && existingCards.length === verses.length) {
+    let anchorCard: HTMLElement | null = null;
+    let anchorOffset = 0;
+
+    if (isUserFollowing && activeAyah) {
+      anchorCard = document.getElementById(`ayah-${activeAyah}`);
+      anchorOffset = 0;
+    } else {
+      const containerScrollTop = surahFeedEl.scrollTop;
+      for (let i = 0; i < existingCards.length; i++) {
+        const card = existingCards[i];
+        if (card && card.offsetTop + card.offsetHeight > containerScrollTop) {
+          anchorCard = card;
+          anchorOffset = card.offsetTop - containerScrollTop;
+          break;
+        }
+      }
+    }
+
+    for (let i = 0; i < verses.length; i++) {
+      const ayah = verses[i] as CorpusAyah;
+      const card = existingCards[i];
+      if (!card) continue;
+      const oldBody = card.querySelector('.ayah-card__body');
+      const newBody = buildCardBody(ayah, showAr, activeTransId);
+      if (oldBody) {
+        card.replaceChild(newBody, oldBody);
+      }
+      const isActive = activeAyah === ayah.ayah;
+      card.className = isActive ? 'ayah-card ayah-card--active' : 'ayah-card ayah-card--context';
+    }
+
+    if (isUserFollowing && activeAyah) {
+      scrollToAyah(activeAyah, false);
+    } else if (anchorCard) {
+      surahFeedEl.scrollTop = anchorCard.offsetTop - anchorOffset;
+    }
+    return;
+  }
+
+  // Full rebuild when switching surahs or mounting initial feed
+  surahFeedEl.innerHTML = '';
 
   const fragment = document.createDocumentFragment();
 
@@ -698,13 +887,6 @@ function renderSurahFeed(surahNumber: number, activeAyah: number | null): void {
     basmalahEl.textContent = 'بِسْمِ ٱللَّهِ ٱلرَّحْمَـٰنِ ٱلرَّحِيمِ';
     fragment.appendChild(basmalahEl);
   }
-
-  const verses = getSurahVerses(surahNumber);
-  const showAr = currentUserPreferences.showArabic ?? true;
-  const activeTransId =
-    currentUserPreferences.activeTranslationId !== undefined
-      ? currentUserPreferences.activeTranslationId
-      : (currentUserPreferences.activeTranslationIds?.[0] ?? null);
 
   for (let i = 0; i < verses.length; i++) {
     const ayah = verses[i] as CorpusAyah;
@@ -760,88 +942,7 @@ function renderSurahFeed(surahNumber: number, activeAyah: number | null): void {
     cardHeader.appendChild(badges);
     card.appendChild(cardHeader);
 
-    const body = document.createElement('div');
-    body.className = 'ayah-card__body';
-
-    let hasPrecedingContent = showAr;
-
-    if (showAr) {
-      const p = document.createElement('p');
-      p.className = 'ayah-card__text';
-      p.setAttribute('dir', 'rtl');
-      p.setAttribute('lang', 'ar');
-      p.textContent = `${ayah.uthmani}\u00A0${ayah.ayahMarker}`.trim();
-      body.appendChild(p);
-    }
-
-    if (
-      currentUserPreferences.showTransliteration &&
-      currentUserPreferences.activeTransliterationId
-    ) {
-      const translitEdition = activeEditions.get(currentUserPreferences.activeTransliterationId);
-      const text = translitEdition?.ayahs[ayah.index];
-      if (text) {
-        const translitContainer = document.createElement('div');
-        translitContainer.className = 'ayah-card__transliteration';
-        translitContainer.setAttribute('dir', 'ltr');
-        if (!hasPrecedingContent) {
-          translitContainer.style.borderTop = 'none';
-          translitContainer.style.paddingTop = '0';
-        }
-
-        const translitP = document.createElement('p');
-        translitP.className = 'ayah-card__transliteration-text';
-        translitP.textContent = text;
-        translitP.appendChild(document.createTextNode(' '));
-        translitP.appendChild(createAyahNumberPill(ayah.ayah, 'ltr'));
-
-        translitContainer.appendChild(translitP);
-        body.appendChild(translitContainer);
-        hasPrecedingContent = true;
-      }
-    }
-
-    if (activeTransId) {
-      const edition = activeEditions.get(activeTransId);
-      if (edition) {
-        const text = edition.ayahs[ayah.index];
-        if (text) {
-          const transContainer = document.createElement('div');
-          transContainer.className = 'ayah-card__translations';
-
-          const block = document.createElement('div');
-          block.className = 'ayah-translation-block';
-          const direction = resolveEditionDirection(
-            edition.identifier,
-            edition.language,
-            edition.direction,
-          );
-          block.setAttribute('dir', direction);
-          if (!hasPrecedingContent) {
-            block.style.borderTop = 'none';
-            block.style.paddingTop = '0';
-          }
-
-          const label = document.createElement('span');
-          label.className = 'ayah-translation-label';
-          const labelBdi = document.createElement('bdi');
-          labelBdi.textContent = getLanguageEndonym(edition.language);
-          label.appendChild(labelBdi);
-
-          const p = document.createElement('p');
-          p.className = 'ayah-translation-text';
-          p.textContent = text;
-          p.appendChild(document.createTextNode(' '));
-          p.appendChild(createAyahNumberPill(ayah.ayah, direction));
-
-          block.appendChild(label);
-          block.appendChild(p);
-          transContainer.appendChild(block);
-          body.appendChild(transContainer);
-        }
-      }
-    }
-
+    const body = buildCardBody(ayah, showAr, activeTransId);
     card.appendChild(body);
     fragment.appendChild(card);
   }
@@ -861,7 +962,7 @@ function scrollToAyah(ayahNumber: number, isSmooth = true): void {
   isProgrammaticScrolling = true;
   target.scrollIntoView({
     behavior: isSmooth ? 'smooth' : 'instant',
-    block: 'center',
+    block: 'start',
   });
 
   const onScrollEnd = () => {
@@ -962,7 +1063,7 @@ function handleMatch(ayah: MatchedAyah | null): void {
       currentFeedSurah = ayah.surah;
       currentActiveAyahNumber = ayah.ayah;
       followReciterBtn.hidden = true;
-      renderSurahFeed(ayah.surah, ayah.ayah);
+      renderSurahFeed(ayah.surah, ayah.ayah, true);
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
           scrollToAyah(ayah.ayah, false);
@@ -1003,7 +1104,7 @@ function onFollowReciterClick(): void {
     followReciterBtn.hidden = true;
     if (currentFeedSurah !== targetSurah) {
       currentFeedSurah = targetSurah;
-      renderSurahFeed(currentFeedSurah, targetAyah);
+      renderSurahFeed(currentFeedSurah, targetAyah, true);
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
           scrollToAyah(targetAyah, false);
@@ -1223,6 +1324,17 @@ async function updateToolbarControls(): Promise<void> {
   }
   toggleTranslitBtn.setAttribute('aria-pressed', showTranslit ? 'true' : 'false');
 
+  const tafsirId = currentUserPreferences.activeTafsirId || DEFAULT_TAFSIR_ID;
+  const isDownloadingTafsir = downloadingEditions.has(tafsirId);
+  const showTafsir = currentUserPreferences.showTafsir ?? false;
+
+  if (isDownloadingTafsir) {
+    toggleTafsirBtn.className = 'pill-btn pill-btn--loading';
+  } else {
+    toggleTafsirBtn.className = showTafsir ? 'pill-btn pill-btn--active' : 'pill-btn';
+  }
+  toggleTafsirBtn.setAttribute('aria-pressed', showTafsir ? 'true' : 'false');
+
   await populateTranslationSelect();
 }
 
@@ -1271,8 +1383,11 @@ function createEditionItem(edition: EditionMetadata, cachedIds: Set<string>): HT
   const isActive =
     edition.type === 'translation'
       ? currentUserPreferences.activeTranslationId === edition.identifier
-      : currentUserPreferences.showTransliteration &&
-        currentUserPreferences.activeTransliterationId === edition.identifier;
+      : edition.type === 'tafsir'
+        ? currentUserPreferences.showTafsir &&
+          currentUserPreferences.activeTafsirId === edition.identifier
+        : currentUserPreferences.showTransliteration &&
+          currentUserPreferences.activeTransliterationId === edition.identifier;
 
   const item = document.createElement('div');
   item.className = isActive ? 'edition-item edition-item--active' : 'edition-item';
@@ -1352,10 +1467,13 @@ function createEditionItem(edition: EditionMetadata, cachedIds: Set<string>): HT
 
   const langTag = document.createElement('span');
   langTag.className = 'edition-item__lang-tag';
+  const tafsirLabel = browser.i18n.getMessage('tafsir') || 'Tafsir';
   langTag.textContent =
     edition.type === 'transliteration'
       ? `Aa · ${edition.language.toUpperCase()}`
-      : edition.language.toUpperCase();
+      : edition.type === 'tafsir'
+        ? `${tafsirLabel} · ${edition.language.toUpperCase()}`
+        : edition.language.toUpperCase();
 
   const authorText = formatEditionAuthors(edition.name, edition.englishName);
   const authorSpan = document.createElement('span');
@@ -1394,6 +1512,11 @@ function createEditionItem(edition: EditionMetadata, cachedIds: Set<string>): HT
         renderSurahFeed(currentFeedSurah, currentActiveAyahNumber);
         await updateToolbarControls();
         await renderSettings();
+      } else if (edition.type === 'tafsir') {
+        const willEnable =
+          !currentUserPreferences.showTafsir ||
+          currentUserPreferences.activeTafsirId !== edition.identifier;
+        await handleTafsirToggle(willEnable, edition.identifier);
       }
     });
   }
@@ -1426,6 +1549,16 @@ async function renderSettings(): Promise<void> {
   editionsListEl.appendChild(translitHeader);
 
   for (const edition of transliterations) {
+    editionsListEl.appendChild(createEditionItem(edition, cachedIds));
+  }
+
+  const tafsirs = getAvailableTafsirs();
+  const tafsirHeader = document.createElement('h3');
+  tafsirHeader.className = 'settings-group-header';
+  tafsirHeader.textContent = browser.i18n.getMessage('availableTafsirs') || 'Tafsir (Exegesis)';
+  editionsListEl.appendChild(tafsirHeader);
+
+  for (const edition of tafsirs) {
     editionsListEl.appendChild(createEditionItem(edition, cachedIds));
   }
 }
@@ -1503,6 +1636,15 @@ async function downloadEdition(id: string): Promise<void> {
       await userPreferencesItem.setValue(currentUserPreferences);
       renderSurahFeed(currentFeedSurah, currentActiveAyahNumber);
       await updateToolbarControls();
+    } else if (edition.type === 'tafsir') {
+      currentUserPreferences = {
+        ...currentUserPreferences,
+        activeTafsirId: id,
+        showTafsir: true,
+      };
+      await userPreferencesItem.setValue(currentUserPreferences);
+      renderSurahFeed(currentFeedSurah, currentActiveAyahNumber);
+      await updateToolbarControls();
     }
   } catch (err) {
     console.error(`Failed to download edition ${id}:`, err);
@@ -1522,6 +1664,8 @@ async function removeEdition(id: string): Promise<void> {
     let nextActiveTransId = currentUserPreferences.activeTranslationId;
     let nextShowTranslit = currentUserPreferences.showTransliteration;
     let nextActiveTranslitId = currentUserPreferences.activeTransliterationId;
+    let nextShowTafsir = currentUserPreferences.showTafsir;
+    let nextActiveTafsirId = currentUserPreferences.activeTafsirId;
 
     if (nextActiveTransId === id) {
       nextActiveTransId = null;
@@ -1529,6 +1673,10 @@ async function removeEdition(id: string): Promise<void> {
     if (nextActiveTranslitId === id) {
       nextShowTranslit = false;
       nextActiveTranslitId = DEFAULT_TRANSLITERATION_ID;
+    }
+    if (nextActiveTafsirId === id) {
+      nextShowTafsir = false;
+      nextActiveTafsirId = null;
     }
     if (!nextActiveTransId && !nextShowTranslit && !nextShowArabic) {
       nextShowArabic = true;
@@ -1541,6 +1689,8 @@ async function removeEdition(id: string): Promise<void> {
       activeTranslationIds: nextActiveTransId ? [nextActiveTransId] : [],
       showTransliteration: nextShowTranslit,
       activeTransliterationId: nextActiveTranslitId,
+      showTafsir: nextShowTafsir,
+      activeTafsirId: nextActiveTafsirId,
     };
 
     await userPreferencesItem.setValue(currentUserPreferences);
@@ -1607,6 +1757,47 @@ async function handleTransliterationToggle(enable: boolean): Promise<void> {
   await renderSettings();
 }
 
+async function handleTafsirToggle(enable: boolean, targetTafsirId?: string): Promise<void> {
+  const tafsirId = targetTafsirId || currentUserPreferences.activeTafsirId || DEFAULT_TAFSIR_ID;
+
+  currentUserPreferences = {
+    ...currentUserPreferences,
+    showTafsir: enable,
+    activeTafsirId: tafsirId,
+  };
+
+  if (enable && !activeEditions.has(tafsirId)) {
+    const cached = await getCachedEdition(tafsirId);
+    if (cached) {
+      activeEditions.set(tafsirId, cached);
+    } else {
+      downloadingEditions.add(tafsirId);
+      await updateToolbarControls();
+      await renderSettings();
+
+      try {
+        const downloaded = await fetchAndCacheEdition(tafsirId);
+        activeEditions.set(tafsirId, downloaded);
+      } catch (err) {
+        console.error(`Failed to download tafsir edition ${tafsirId}:`, err);
+      } finally {
+        downloadingEditions.delete(tafsirId);
+        await updateToolbarControls();
+        await renderSettings();
+      }
+    }
+  }
+
+  await userPreferencesItem.setValue(currentUserPreferences);
+  renderSurahFeed(currentFeedSurah, currentActiveAyahNumber);
+  await updateToolbarControls();
+  await renderSettings();
+}
+
+async function onTafsirToggle(): Promise<void> {
+  await handleTafsirToggle(!currentUserPreferences.showTafsir);
+}
+
 function onSettingsOpen(): void {
   void renderSettings();
   settingsDialog.showModal();
@@ -1638,6 +1829,7 @@ async function init(): Promise<void> {
   toggleBtn.addEventListener('click', handleToggle);
   toggleArabicBtn.addEventListener('click', onArabicToggle);
   toggleTranslitBtn.addEventListener('click', onTranslitToggle);
+  toggleTafsirBtn.addEventListener('click', onTafsirToggle);
   translationSelectEl.addEventListener('change', onTranslationChange);
   followReciterBtn.addEventListener('click', onFollowReciterClick);
 
@@ -1681,13 +1873,43 @@ async function init(): Promise<void> {
 
   unwatchPreferences = userPreferencesItem.watch((prefs: UserEditionPreferences | null) => {
     if (prefs) {
+      const incomingTransId =
+        prefs.activeTranslationId !== undefined
+          ? prefs.activeTranslationId
+          : (prefs.activeTranslationIds?.[0] ?? null);
+      const currentTransId =
+        currentUserPreferences.activeTranslationId !== undefined
+          ? currentUserPreferences.activeTranslationId
+          : (currentUserPreferences.activeTranslationIds?.[0] ?? null);
+
+      const isArabicSame =
+        (prefs.showArabic ?? true) === (currentUserPreferences.showArabic ?? true);
+      const isTranslitSame =
+        prefs.showTransliteration === currentUserPreferences.showTransliteration;
+      const isTranslitIdSame =
+        prefs.activeTransliterationId === currentUserPreferences.activeTransliterationId;
+      const isTransSame = incomingTransId === currentTransId;
+      const isTafsirSame =
+        (prefs.showTafsir ?? false) === (currentUserPreferences.showTafsir ?? false);
+      const isTafsirIdSame =
+        (prefs.activeTafsirId ?? null) === (currentUserPreferences.activeTafsirId ?? null);
+
+      // Skip echo updates already applied locally
+      if (
+        isArabicSame &&
+        isTranslitSame &&
+        isTranslitIdSame &&
+        isTransSame &&
+        isTafsirSame &&
+        isTafsirIdSame
+      ) {
+        return;
+      }
+
       currentUserPreferences = {
         ...prefs,
         showArabic: prefs.showArabic ?? true,
-        activeTranslationId:
-          prefs.activeTranslationId !== undefined
-            ? prefs.activeTranslationId
-            : (prefs.activeTranslationIds?.[0] ?? null),
+        activeTranslationId: incomingTransId,
       };
       loadActiveEditions(currentUserPreferences).then((editions) => {
         activeEditions = editions;
@@ -1720,6 +1942,7 @@ function cleanup(): void {
   toggleBtn?.removeEventListener('click', handleToggle);
   toggleArabicBtn?.removeEventListener('click', onArabicToggle);
   toggleTranslitBtn?.removeEventListener('click', onTranslitToggle);
+  toggleTafsirBtn?.removeEventListener('click', onTafsirToggle);
   translationSelectEl?.removeEventListener('change', onTranslationChange);
   followReciterBtn?.removeEventListener('click', onFollowReciterClick);
 

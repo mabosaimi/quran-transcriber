@@ -202,6 +202,26 @@
   "surahNavigation": {
     "message": "Surah Navigation",
     "description": "Title for the surah picker dialog"
+  },
+  "tafsir": {
+    "message": "Tafsir",
+    "description": "Label for Tafsir exegesis"
+  },
+  "toggleTafsir": {
+    "message": "Toggle Tafsir",
+    "description": "Tooltip for Tafsir toggle button"
+  },
+  "availableTafsirs": {
+    "message": "Tafsir (Exegesis)",
+    "description": "Header for Tafsir list in settings"
+  },
+  "tafsirToggleLabel": {
+    "message": "Show Tafsir",
+    "description": "Label for Tafsir toggle in settings"
+  },
+  "tafsirSourceLabel": {
+    "message": "Source",
+    "description": "Label for Tafsir source selector"
   }
 }
 

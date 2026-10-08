@@ -8,7 +8,7 @@ export interface StoredEdition {
   englishName: string;
   language: string;
   nativeName?: string;
-  type: 'translation' | 'transliteration';
+  type: 'translation' | 'transliteration' | 'tafsir';
   direction: 'ltr' | 'rtl';
   ayahs: string[];
 }
@@ -19,7 +19,7 @@ export interface EditionMetadata {
   englishName: string;
   language: string;
   nativeName: string;
-  type: 'translation' | 'transliteration';
+  type: 'translation' | 'transliteration' | 'tafsir';
   direction: 'ltr' | 'rtl';
 }
 
@@ -166,9 +166,37 @@ export const CURATED_EDITIONS: readonly EditionMetadata[] = [
     type: 'transliteration',
     direction: 'ltr',
   },
+  {
+    identifier: 'ar.muyassar',
+    name: 'تفسير الميسر',
+    englishName: 'Al-Muyassar',
+    language: 'ar',
+    nativeName: 'العربية',
+    type: 'tafsir',
+    direction: 'rtl',
+  },
+  {
+    identifier: 'ar.jalalayn',
+    name: 'تفسير الجلالين',
+    englishName: 'Al-Jalalayn',
+    language: 'ar',
+    nativeName: 'العربية',
+    type: 'tafsir',
+    direction: 'rtl',
+  },
+  {
+    identifier: 'id.jalalayn',
+    name: 'Tafsir Jalalayn',
+    englishName: 'Jalal ad-Din al-Mahalli & as-Suyuti',
+    language: 'id',
+    nativeName: 'Bahasa Indonesia',
+    type: 'tafsir',
+    direction: 'ltr',
+  },
 ];
 
 export const DEFAULT_TRANSLITERATION_ID = 'en.transliteration';
+export const DEFAULT_TAFSIR_ID = 'ar.muyassar';
 
 export function getAvailableTranslations(): readonly EditionMetadata[] {
   return CURATED_EDITIONS.filter((e) => e.type === 'translation');
@@ -176,6 +204,10 @@ export function getAvailableTranslations(): readonly EditionMetadata[] {
 
 export function getAvailableTransliterations(): readonly EditionMetadata[] {
   return CURATED_EDITIONS.filter((e) => e.type === 'transliteration');
+}
+
+export function getAvailableTafsirs(): readonly EditionMetadata[] {
+  return CURATED_EDITIONS.filter((e) => e.type === 'tafsir');
 }
 
 export function resolveTransliterationForLanguage(languageCode: string): EditionMetadata {
@@ -318,7 +350,11 @@ export function validateAndFlattenEdition(payload: unknown): StoredEdition {
 
   const curated = CURATED_EDITIONS.find((e) => e.identifier === edition.identifier);
   const type =
-    edition.type === 'transliteration' ? 'transliteration' : (curated?.type ?? 'translation');
+    edition.type === 'transliteration'
+      ? 'transliteration'
+      : edition.type === 'tafsir'
+        ? 'tafsir'
+        : (curated?.type ?? 'translation');
   const direction = resolveEditionDirection(
     edition.identifier,
     edition.language,
@@ -424,6 +460,12 @@ export async function loadActiveEditions(
 
   if (activeId && !idsToLoad.includes(activeId)) {
     idsToLoad.push(activeId);
+  }
+
+  if (preferences.showTafsir && preferences.activeTafsirId) {
+    if (!idsToLoad.includes(preferences.activeTafsirId)) {
+      idsToLoad.push(preferences.activeTafsirId);
+    }
   }
 
   await Promise.all(

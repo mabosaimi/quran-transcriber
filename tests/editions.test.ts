@@ -2,11 +2,13 @@ import 'fake-indexeddb/auto';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   CURATED_EDITIONS,
+  DEFAULT_TAFSIR_ID,
   DEFAULT_TRANSLITERATION_ID,
   deleteCachedEdition,
   EditionValidationError,
   fetchAndCacheEdition,
   formatEditionAuthors,
+  getAvailableTafsirs,
   getAvailableTransliterations,
   getCachedEdition,
   getCachedEditionIds,
@@ -91,6 +93,29 @@ describe('lib/editions', () => {
       expect(resolveTransliterationForLanguage('tr').identifier).toBe('tr.transliteration');
       expect(resolveTransliterationForLanguage('ru').identifier).toBe('ru.transliteration');
       expect(resolveTransliterationForLanguage('fr').identifier).toBe(DEFAULT_TRANSLITERATION_ID);
+    });
+
+    it('curates tafsir editions and contains Al-Muyassar, Al-Jalalayn, and Indonesian Jalalayn', () => {
+      const tafsirs = getAvailableTafsirs();
+      expect(tafsirs.map((e) => e.identifier)).toEqual([
+        'ar.muyassar',
+        'ar.jalalayn',
+        'id.jalalayn',
+      ]);
+      const muyassar = tafsirs.find((e) => e.identifier === 'ar.muyassar');
+      expect(muyassar?.type).toBe('tafsir');
+      expect(muyassar?.direction).toBe('rtl');
+      expect(muyassar?.language).toBe('ar');
+
+      const jalalayn = tafsirs.find((e) => e.identifier === 'ar.jalalayn');
+      expect(jalalayn?.type).toBe('tafsir');
+      expect(jalalayn?.direction).toBe('rtl');
+      expect(jalalayn?.language).toBe('ar');
+
+      const idJalalayn = tafsirs.find((e) => e.identifier === 'id.jalalayn');
+      expect(idJalalayn?.type).toBe('tafsir');
+      expect(idJalalayn?.direction).toBe('ltr');
+      expect(idJalalayn?.language).toBe('id');
     });
   });
 
@@ -314,6 +339,29 @@ describe('lib/editions', () => {
 
       await deleteCachedEdition('en.translit-test');
       await deleteCachedEdition('en.trans-test');
+    });
+
+    it('loads requested tafsir into active editions map when enabled', async () => {
+      const tafsirEdition = validateAndFlattenEdition(buildMockValidPayload('ar.muyassar-test'));
+      tafsirEdition.type = 'tafsir';
+
+      const { set } = await import('idb-keyval');
+      await set('edition:ar.muyassar-test', tafsirEdition);
+
+      const map = await loadActiveEditions({
+        activeTranslationId: null,
+        showTransliteration: false,
+        activeTransliterationId: 'en.transliteration',
+        activeTranslationIds: [],
+        showTafsir: true,
+        activeTafsirId: 'ar.muyassar-test',
+      });
+
+      expect(map.size).toBe(1);
+      expect(map.has('ar.muyassar-test')).toBe(true);
+      expect(map.get('ar.muyassar-test')?.type).toBe('tafsir');
+
+      await deleteCachedEdition('ar.muyassar-test');
     });
 
     it('loads nothing when Arabic Only is selected and transliteration is disabled', async () => {

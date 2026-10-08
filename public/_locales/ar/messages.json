@@ -202,6 +202,26 @@
   "surahNavigation": {
     "message": "فهرس السور",
     "description": "عنوان نافذة اختيار السور"
+  },
+  "tafsir": {
+    "message": "تفسير",
+    "description": "نص خيار التفسير"
+  },
+  "toggleTafsir": {
+    "message": "تبديل التفسير",
+    "description": "تلميح زر تفعيل التفسير"
+  },
+  "availableTafsirs": {
+    "message": "كتب التفسير",
+    "description": "عنوان قسم التفسير في الإعدادات"
+  },
+  "tafsirToggleLabel": {
+    "message": "عرض التفسير",
+    "description": "نص خيار تفعيل التفسير في الإعدادات"
+  },
+  "tafsirSourceLabel": {
+    "message": "المصدر",
+    "description": "نص اختيار مصدر التفسير"
   }
 }
 

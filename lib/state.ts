@@ -25,6 +25,8 @@ export interface UserEditionPreferences {
   activeTranslationIds?: string[];
   showTransliteration: boolean;
   activeTransliterationId: string;
+  showTafsir?: boolean;
+  activeTafsirId?: string | null;
 }
 
 export const captureStateItem = storage.defineItem<CaptureStateValue>('session:captureState', {
@@ -52,6 +54,8 @@ export const userPreferencesItem = storage.defineItem<UserEditionPreferences>(
       activeTranslationIds: [],
       showTransliteration: false,
       activeTransliterationId: DEFAULT_TRANSLITERATION_ID,
+      showTafsir: false,
+      activeTafsirId: null,
     },
   },
 );
