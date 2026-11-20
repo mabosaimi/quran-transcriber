@@ -116,7 +116,7 @@
     "description": "Header for transliterations list in settings"
   },
   "downloadHint": {
-    "message": "Download translations for offline use. Once downloaded, choose them directly from the toolbar.",
+    "message": "Download translations, transliterations and tafsir for offline use. Downloaded items can be switched on from the toolbar.",
     "description": "Hint in settings dialog explaining download workflow"
   },
   "noTranslation": {
@@ -144,7 +144,7 @@
     "description": "Tooltip for Transliteration toggle button"
   },
   "phoneticScript": {
-    "message": "Phonetic Latin script",
+    "message": "Phonetic transliteration",
     "description": "Description for transliteration edition"
   },
   "followReciter": {
@@ -156,7 +156,7 @@
     "description": "Placeholder for surah search input"
   },
   "changeSurah": {
-    "message": "Change Surah",
+    "message": "Select Surah",
     "description": "Tooltip and accessible title for the surah switcher trigger"
   },
   "allSurahs": {
@@ -222,6 +222,224 @@
   "tafsirSourceLabel": {
     "message": "Source",
     "description": "Label for Tafsir source selector"
+  },
+  "appearance": {
+    "message": "Appearance & Reading",
+    "description": "Section header for appearance and display settings"
+  },
+  "theme": {
+    "message": "Theme",
+    "description": "Label for theme selector"
+  },
+  "themeSystem": {
+    "message": "System",
+    "description": "System theme option"
+  },
+  "themeLight": {
+    "message": "Light",
+    "description": "Light theme option"
+  },
+  "themeDark": {
+    "message": "Dark",
+    "description": "Dark theme option"
+  },
+  "themeSepia": {
+    "message": "Sepia",
+    "description": "Warm Sepia parchment theme option"
+  },
+  "arabicFontSize": {
+    "message": "Text Size",
+    "description": "Label for font size selector"
+  },
+  "fontSizeNormal": {
+    "message": "Normal",
+    "description": "Normal font size option"
+  },
+  "fontSizeLarge": {
+    "message": "Large",
+    "description": "Large font size option"
+  },
+  "fontSizeXLarge": {
+    "message": "Extra Large",
+    "description": "Extra large font size option"
+  },
+  "readingDensity": {
+    "message": "Display Density",
+    "description": "Label for display density selector"
+  },
+  "densityComfortable": {
+    "message": "Comfortable",
+    "description": "Comfortable reading density option"
+  },
+  "densityCompact": {
+    "message": "Compact",
+    "description": "Compact reading density option"
+  },
+  "copyAyah": {
+    "message": "Copy verse",
+    "description": "Tooltip/aria-label for copying verse text to clipboard"
+  },
+  "copied": {
+    "message": "Copied!",
+    "description": "Feedback label after verse is copied"
+  },
+  "tafsirDeepDive": {
+    "message": "Read on Quran.com",
+    "description": "Link label to view full tafsir on Quran.com"
+  },
+  "uiLanguage": {
+    "message": "Language",
+    "description": "Label for interface language selector"
+  },
+  "displayOptions": {
+    "message": "Display options",
+    "description": "Accessible label for the display options toolbar"
+  },
+  "translation": {
+    "message": "Translation",
+    "description": "Accessible label for the translation selector"
+  },
+  "searchSurahs": {
+    "message": "Search surahs",
+    "description": "Accessible label for the surah search field"
+  },
+  "surahList": {
+    "message": "Surahs",
+    "description": "Accessible label for the surah list"
+  },
+  "revelationFilter": {
+    "message": "Revelation",
+    "description": "Accessible label for the Meccan/Medinan filter group"
+  },
+  "arabicLocked": {
+    "message": "Turn on a translation or transliteration to hide the Arabic text",
+    "description": "Tooltip explaining why the Arabic toggle is disabled"
+  },
+  "removeEdition": {
+    "message": "Remove $NAME$",
+    "description": "Accessible label for the remove button of a downloaded edition",
+    "placeholders": {
+      "name": {
+        "content": "$1",
+        "example": "English"
+      }
+    }
+  },
+  "downloadEdition": {
+    "message": "Download $NAME$",
+    "description": "Accessible label for the download button of an edition",
+    "placeholders": {
+      "name": {
+        "content": "$1",
+        "example": "English"
+      }
+    }
+  },
+  "langEnglish": {
+    "message": "English",
+    "description": "English language option"
+  },
+  "langArabic": {
+    "message": "العربية",
+    "description": "Arabic language option"
+  },
+  "translitShort": {
+    "message": "Translit",
+    "description": "Short toolbar pill label for phonetic transliteration"
+  },
+  "layerOrder": {
+    "message": "Verse Card Order",
+    "description": "Label for customizing the top-to-bottom order of elements in a verse card"
+  },
+  "layerOrderHint": {
+    "message": "Reorder how elements appear inside each verse card",
+    "description": "Helper text for verse card order"
+  },
+  "resetOrder": {
+    "message": "Reset",
+    "description": "Button to reset verse card order to default"
+  },
+  "moveLayerUp": {
+    "message": "Move $LAYER$ up",
+    "description": "Accessible label for moving a card layer up",
+    "placeholders": {
+      "layer": {
+        "content": "$1",
+        "example": "Translation"
+      }
+    }
+  },
+  "moveLayerDown": {
+    "message": "Move $LAYER$ down",
+    "description": "Accessible label for moving a card layer down",
+    "placeholders": {
+      "layer": {
+        "content": "$1",
+        "example": "Translation"
+      }
+    }
+  },
+  "layerArabic": {
+    "message": "Arabic Script",
+    "description": "Label for Arabic Quranic text layer"
+  },
+  "layerTransliteration": {
+    "message": "Transliteration",
+    "description": "Label for phonetic transliteration layer"
+  },
+  "layerTranslation": {
+    "message": "Translation",
+    "description": "Label for translation layer"
+  },
+  "layerTafsir": {
+    "message": "Tafsir",
+    "description": "Label for tafsir commentary layer"
+  },
+  "densityComfortableHint": {
+    "message": "Generous card spacing with full verse progress",
+    "description": "Helper caption when Comfortable density is selected"
+  },
+  "densityCompactHint": {
+    "message": "Tighter spacing to fit more verses on screen",
+    "description": "Helper caption when Compact density is selected"
+  },
+  "ayahProgress": {
+    "message": "Verse $CURRENT$ of $TOTAL$",
+    "description": "Verse progress subtitle in card header",
+    "placeholders": {
+      "current": {
+        "content": "$1",
+        "example": "1"
+      },
+      "total": {
+        "content": "$2",
+        "example": "7"
+      }
+    }
+  },
+  "previousSurah": {
+    "message": "Previous Surah",
+    "description": "Button label to navigate to the previous surah"
+  },
+  "nextSurah": {
+    "message": "Next Surah",
+    "description": "Button label to navigate to the next surah"
+  },
+  "editionFilterAll": {
+    "message": "All",
+    "description": "Filter tab to show all editions in settings"
+  },
+  "editionFilterTranslations": {
+    "message": "Translations",
+    "description": "Filter tab to show only translations in settings"
+  },
+  "editionFilterTafsir": {
+    "message": "Tafsir",
+    "description": "Filter tab to show only tafsir editions in settings"
+  },
+  "editionFilterTranslit": {
+    "message": "Transliteration",
+    "description": "Filter tab to show only transliterations in settings"
   }
 }
 

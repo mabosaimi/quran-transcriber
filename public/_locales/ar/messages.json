@@ -1,6 +1,6 @@
 {
   "extName": {
-    "message": "ناسخ القرآن",
+    "message": "متابع التلاوة",
     "description": "اسم الإضافة"
   },
   "extDescription": {
@@ -56,15 +56,15 @@
     "description": "عنوان قسم الترجمات"
   },
   "transliteration": {
-    "message": "النسخ الصوتي",
-    "description": "تفعيل النسخ الصوتي"
+    "message": "النطق الصوتي (النقحرة)",
+    "description": "تفعيل النطق الصوتي (النقحرة)"
   },
   "downloading": {
-    "message": "جارٍ التحميل...",
-    "description": "مؤشر تحميل الترجمة"
+    "message": "جارٍ التنزيل...",
+    "description": "مؤشر تنزيل الترجمة"
   },
   "offlineNotice": {
-    "message": "غير متصل - اتصل لتحميل الترجمة",
+    "message": "لا يوجد اتصال بالإنترنت لتنزيل الترجمة",
     "description": "تنبيه عند عدم الاتصال بالإنترنت وعدم توفر الترجمة"
   },
   "close": {
@@ -88,12 +88,12 @@
     "description": "وصف خيار النص القرآني فقط"
   },
   "download": {
-    "message": "تحميل",
-    "description": "زر تحميل الترجمة"
+    "message": "تنزيل",
+    "description": "زر تنزيل الترجمة"
   },
   "downloaded": {
-    "message": "تم التحميل",
-    "description": "شارة تم تحميل الترجمة"
+    "message": "تم التنزيل",
+    "description": "شارة تم تنزيل الترجمة"
   },
   "approxSize": {
     "message": "~1.2 ميغابايت",
@@ -116,7 +116,7 @@
     "description": "عنوان قائمة النطق الصوتي في الإعدادات"
   },
   "downloadHint": {
-    "message": "قم بتنزيل الترجمات للاستخدام بدون اتصال. بعد التنزيل، يمكنك اختيارها مباشرة من شريط الأدوات.",
+    "message": "نزّل الترجمات والنطق الصوتي والتفاسير للاستخدام دون اتصال، ثم فعّلها من شريط الأدوات.",
     "description": "تلميح في نافذة الإعدادات"
   },
   "noTranslation": {
@@ -124,8 +124,8 @@
     "description": "خيار في قائمة الترجمات عند عدم تفعيل ترجمة"
   },
   "remove": {
-    "message": "حذف",
-    "description": "زر حذف ملف الترجمة المنزّل"
+    "message": "إزالة",
+    "description": "زر إزالة ملف الترجمة المنزّل"
   },
   "downloadMore": {
     "message": "+ تنزيل لغات أخرى...",
@@ -140,12 +140,12 @@
     "description": "تلميح زر تبديل النص العربي"
   },
   "toggleTransliteration": {
-    "message": "تبديل عرض الحرفية (النقحرة)",
-    "description": "تلميح زر تبديل الحرفية"
+    "message": "عرض النطق الصوتي (النقحرة)",
+    "description": "تلميح زر تبديل النطق الصوتي (النقحرة)"
   },
   "phoneticScript": {
-    "message": "نطق الكلمات بالأحرف اللاتينية",
-    "description": "وصف طبعة الحرفية"
+    "message": "نطق الآيات بحروف اللغات الأخرى (النقحرة)",
+    "description": "وصف طبعة النطق الصوتي (النقحرة)"
   },
   "followReciter": {
     "message": "متابعة القارئ",
@@ -156,8 +156,8 @@
     "description": "نص العنصر النائب لحقل بحث السور"
   },
   "changeSurah": {
-    "message": "تغيير السورة",
-    "description": "تلميح زر تغيير السورة"
+    "message": "اختيار السورة",
+    "description": "تلميح زر اختيار السورة"
   },
   "allSurahs": {
     "message": "الكل",
@@ -172,7 +172,7 @@
     "description": "تصنيف السورة المدنية"
   },
   "versesCount": {
-    "message": "$COUNT$ آيات",
+    "message": "$COUNT$ آية",
     "description": "عدد الآيات",
     "placeholders": {
       "count": {
@@ -222,6 +222,224 @@
   "tafsirSourceLabel": {
     "message": "المصدر",
     "description": "نص اختيار مصدر التفسير"
+  },
+  "appearance": {
+    "message": "المظهر والقراءة",
+    "description": "عنوان قسم إعدادات المظهر والقراءة"
+  },
+  "theme": {
+    "message": "المظهر",
+    "description": "نص خيار المظهر"
+  },
+  "themeSystem": {
+    "message": "تلقائي",
+    "description": "خيار المظهر التلقائي حسب النظام"
+  },
+  "themeLight": {
+    "message": "فاتح",
+    "description": "خيار المظهر الفاتح"
+  },
+  "themeDark": {
+    "message": "داكن",
+    "description": "خيار المظهر الداكن"
+  },
+  "themeSepia": {
+    "message": "دافئ",
+    "description": "خيار مظهر الورق الدافئ المريح للعين"
+  },
+  "arabicFontSize": {
+    "message": "حجم الخط",
+    "description": "نص خيار حجم الخط"
+  },
+  "fontSizeNormal": {
+    "message": "عادي",
+    "description": "خيار الحجم العادي"
+  },
+  "fontSizeLarge": {
+    "message": "كبير",
+    "description": "خيار الحجم الكبير"
+  },
+  "fontSizeXLarge": {
+    "message": "كبير جداً",
+    "description": "خيار الحجم الكبير جداً"
+  },
+  "readingDensity": {
+    "message": "كثافة العرض",
+    "description": "نص خيار كثافة العرض"
+  },
+  "densityComfortable": {
+    "message": "مريح",
+    "description": "خيار العرض المريح"
+  },
+  "densityCompact": {
+    "message": "مدمج",
+    "description": "خيار العرض المدمج"
+  },
+  "copyAyah": {
+    "message": "نسخ الآية",
+    "description": "تلميح نسخ نص الآية"
+  },
+  "copied": {
+    "message": "تم النسخ!",
+    "description": "تنبيه نجاح نسخ الآية"
+  },
+  "tafsirDeepDive": {
+    "message": "التفسير على Quran.com",
+    "description": "رابط قراءة التفسير كاملاً على Quran.com"
+  },
+  "uiLanguage": {
+    "message": "اللغة",
+    "description": "نص اختيار لغة الواجهة"
+  },
+  "displayOptions": {
+    "message": "خيارات العرض",
+    "description": "التسمية الوصفية لشريط خيارات العرض"
+  },
+  "translation": {
+    "message": "الترجمة",
+    "description": "التسمية الوصفية لقائمة اختيار الترجمة"
+  },
+  "searchSurahs": {
+    "message": "البحث عن سورة",
+    "description": "التسمية الوصفية لحقل البحث عن السور"
+  },
+  "surahList": {
+    "message": "السور",
+    "description": "التسمية الوصفية لقائمة السور"
+  },
+  "revelationFilter": {
+    "message": "مكان النزول",
+    "description": "التسمية الوصفية لمجموعة تصفية السور حسب مكان النزول"
+  },
+  "arabicLocked": {
+    "message": "فعّل ترجمة أو النطق الصوتي أولاً لإخفاء النص العربي",
+    "description": "تلميح يوضح سبب تعذر إخفاء النص العربي"
+  },
+  "removeEdition": {
+    "message": "إزالة $NAME$",
+    "description": "التسمية الوصفية لزر إزالة طبعة منزّلة",
+    "placeholders": {
+      "name": {
+        "content": "$1",
+        "example": "English"
+      }
+    }
+  },
+  "downloadEdition": {
+    "message": "تنزيل $NAME$",
+    "description": "التسمية الوصفية لزر تنزيل طبعة",
+    "placeholders": {
+      "name": {
+        "content": "$1",
+        "example": "English"
+      }
+    }
+  },
+  "langEnglish": {
+    "message": "English",
+    "description": "خيار اللغة الإنجليزية"
+  },
+  "langArabic": {
+    "message": "العربية",
+    "description": "خيار اللغة العربية"
+  },
+  "translitShort": {
+    "message": "النطق",
+    "description": "تسمية مختصرة لزر النطق الصوتي (النقحرة) في شريط الأدوات"
+  },
+  "layerOrder": {
+    "message": "ترتيب عناصر الآية",
+    "description": "عنوان التحكم بترتيب ظهور عناصر الآية داخل البطاقة"
+  },
+  "layerOrderHint": {
+    "message": "رتّب تسلسل ظهور العناصر داخل كل بطاقة آية",
+    "description": "وصف توضيحي لترتيب عناصر الآية"
+  },
+  "resetOrder": {
+    "message": "إعادة الضبط",
+    "description": "زر إعادة ترتيب عناصر الآية للوضع الافتراضي"
+  },
+  "moveLayerUp": {
+    "message": "تحريك $LAYER$ للأعلى",
+    "description": "تسمية وصفية لتحريك عنصر للأعلى",
+    "placeholders": {
+      "layer": {
+        "content": "$1",
+        "example": "الترجمة"
+      }
+    }
+  },
+  "moveLayerDown": {
+    "message": "تحريك $LAYER$ للأسفل",
+    "description": "تسمية وصفية لتحريك عنصر للأسفل",
+    "placeholders": {
+      "layer": {
+        "content": "$1",
+        "example": "الترجمة"
+      }
+    }
+  },
+  "layerArabic": {
+    "message": "النص القرآني",
+    "description": "تسمية طبقة النص القرآني العربي"
+  },
+  "layerTransliteration": {
+    "message": "النطق الصوتي (النقحرة)",
+    "description": "تسمية طبقة النطق الصوتي (النقحرة)"
+  },
+  "layerTranslation": {
+    "message": "الترجمة",
+    "description": "تسمية طبقة الترجمة"
+  },
+  "layerTafsir": {
+    "message": "التفسير",
+    "description": "تسمية طبقة التفسير"
+  },
+  "densityComfortableHint": {
+    "message": "تباعد مريح بين البطاقات مع تفاصيل تقدم الآيات",
+    "description": "وصف خيار العرض المريح"
+  },
+  "densityCompactHint": {
+    "message": "تباعد مدمج لعرض آيات أكثر في الشاشة",
+    "description": "وصف خيار العرض المدمج"
+  },
+  "ayahProgress": {
+    "message": "الآية $CURRENT$ من $TOTAL$",
+    "description": "تقدم الآية داخل السورة",
+    "placeholders": {
+      "current": {
+        "content": "$1",
+        "example": "1"
+      },
+      "total": {
+        "content": "$2",
+        "example": "7"
+      }
+    }
+  },
+  "previousSurah": {
+    "message": "السورة السابقة",
+    "description": "زر الانتقال إلى السورة السابقة"
+  },
+  "nextSurah": {
+    "message": "السورة التالية",
+    "description": "زر الانتقال إلى السورة التالية"
+  },
+  "editionFilterAll": {
+    "message": "الكل",
+    "description": "تصفية لعرض جميع الطبعات"
+  },
+  "editionFilterTranslations": {
+    "message": "الترجمات",
+    "description": "تصفية لعرض الترجمات فقط"
+  },
+  "editionFilterTafsir": {
+    "message": "التفاسير",
+    "description": "تصفية لعرض التفاسير فقط"
+  },
+  "editionFilterTranslit": {
+    "message": "النطق",
+    "description": "تصفية لعرض النطق الصوتي (النقحرة) فقط"
   }
 }
 

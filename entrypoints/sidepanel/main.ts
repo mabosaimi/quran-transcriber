@@ -17,6 +17,13 @@ import {
   resolveTransliterationForLanguage,
   type StoredEdition,
 } from '@/lib/editions';
+import {
+  getEffectiveDirection,
+  getEffectiveLanguage,
+  getMessage,
+  localizeDOM,
+  setUiLanguage,
+} from '@/lib/i18n';
 import { type CaptureResponseMessage, MSG } from '@/lib/messages';
 import { normalizeArabic } from '@/lib/normalize';
 import {
@@ -28,17 +35,22 @@ import {
 } from '@/lib/quran-corpus';
 import { SURAHS, type SurahMeta, toArabicNumerals } from '@/lib/quran-meta';
 import {
+  type AppTheme,
+  type ArabicFontSize,
   CaptureState,
   type CaptureStateValue,
+  type CardLayer,
   captureStateItem,
+  DEFAULT_LAYER_ORDER,
   type MatchedAyah,
   matchedAyahItem,
+  normalizeLayerOrder,
+  type ReadingDensity,
   transcriptItem,
+  type UiLanguage,
   type UserEditionPreferences,
   userPreferencesItem,
 } from '@/lib/state';
-
-type I18nKey = Parameters<typeof browser.i18n.getMessage>[0];
 
 let toggleBtn: HTMLButtonElement;
 let idleHint: HTMLElement;
@@ -101,6 +113,14 @@ let settingsBtn: HTMLButtonElement;
 let settingsDialog: HTMLDialogElement;
 let settingsCloseBtn: HTMLButtonElement;
 let editionsListEl: HTMLElement;
+let settingsEditionsSectionEl: HTMLElement | null = null;
+let densityHintEl: HTMLElement | null = null;
+let layerOrderListEl: HTMLElement | null = null;
+let resetLayerOrderBtn: HTMLButtonElement | null = null;
+let editionFilterPills: NodeListOf<HTMLButtonElement>;
+
+type EditionFilterType = 'all' | 'translation' | 'tafsir' | 'transliteration';
+let currentEditionFilter: EditionFilterType = 'all';
 
 let currentCaptureState: CaptureStateValue = CaptureState.IDLE;
 let currentMatchedAyah: MatchedAyah | null = null;
@@ -112,6 +132,7 @@ let isToggling = false;
 let activeTabRequired = false;
 
 let activeEditions = new Map<string, StoredEdition>();
+let cachedEditionIdsSet = new Set<string>();
 let currentUserPreferences: UserEditionPreferences = {
   showArabic: true,
   activeTranslationId: null,
@@ -120,8 +141,89 @@ let currentUserPreferences: UserEditionPreferences = {
   activeTransliterationId: DEFAULT_TRANSLITERATION_ID,
   showTafsir: false,
   activeTafsirId: null,
+  theme: 'system',
+  arabicFontSize: 'normal',
+  readingDensity: 'comfortable',
+  uiLanguage: 'system',
+  layerOrder: [...DEFAULT_LAYER_ORDER],
 };
 const downloadingEditions = new Set<string>();
+
+function withInstantLayoutChange(fn: () => void): void {
+  document.documentElement.classList.add('no-transitions');
+  try {
+    fn();
+    void document.documentElement.offsetHeight;
+  } finally {
+    requestAnimationFrame(() => {
+      document.documentElement.classList.remove('no-transitions');
+    });
+  }
+}
+
+async function refreshCachedEditionIds(): Promise<Set<string>> {
+  cachedEditionIdsSet = new Set(await getCachedEditionIds());
+  return cachedEditionIdsSet;
+}
+
+function updateDensityHint(): void {
+  if (!densityHintEl) return;
+  const isCompact = (currentUserPreferences.readingDensity ?? 'comfortable') === 'compact';
+  const key = isCompact ? 'densityCompactHint' : 'densityComfortableHint';
+  densityHintEl.dataset.i18n = key;
+  densityHintEl.textContent =
+    getMessage(key) ||
+    (isCompact
+      ? 'Tighter spacing to fit more verses on screen'
+      : 'Generous card spacing with full verse progress');
+}
+
+function applyAppearancePreferences(options?: {
+  theme?: AppTheme;
+  arabicFontSize?: ArabicFontSize;
+  readingDensity?: ReadingDensity;
+  uiLanguage?: UiLanguage;
+}): void {
+  const theme = options?.theme ?? currentUserPreferences.theme ?? 'system';
+  const arabicFontSize =
+    options?.arabicFontSize ?? currentUserPreferences.arabicFontSize ?? 'normal';
+  const readingDensity =
+    options?.readingDensity ?? currentUserPreferences.readingDensity ?? 'comfortable';
+  const uiLanguage = options?.uiLanguage ?? currentUserPreferences.uiLanguage ?? 'system';
+
+  setUiLanguage(uiLanguage);
+  document.documentElement.dataset.theme = theme;
+  document.documentElement.dataset.arabicSize = arabicFontSize;
+  document.documentElement.dataset.density = readingDensity;
+  document.documentElement.dir = getEffectiveDirection();
+  document.documentElement.lang = getEffectiveLanguage();
+  const metaColorScheme = document.querySelector<HTMLMetaElement>('meta[name="color-scheme"]');
+  if (metaColorScheme) {
+    if (theme === 'dark') {
+      metaColorScheme.content = 'dark';
+    } else if (theme === 'light' || theme === 'sepia') {
+      metaColorScheme.content = 'light';
+    } else {
+      metaColorScheme.content = 'light dark';
+    }
+  }
+  updateDensityHint();
+}
+
+// Synchronously apply cached appearance preferences to eliminate layout flash before async hydration
+try {
+  const cachedTheme = localStorage.getItem('theme') as AppTheme | null;
+  const cachedSize = localStorage.getItem('arabicFontSize') as ArabicFontSize | null;
+  const cachedDensity = localStorage.getItem('readingDensity') as ReadingDensity | null;
+  const cachedLang = localStorage.getItem('uiLanguage') as UiLanguage | null;
+  if (cachedTheme) currentUserPreferences.theme = cachedTheme;
+  if (cachedSize) currentUserPreferences.arabicFontSize = cachedSize;
+  if (cachedDensity) currentUserPreferences.readingDensity = cachedDensity;
+  if (cachedLang) currentUserPreferences.uiLanguage = cachedLang;
+  applyAppearancePreferences();
+} catch {
+  // Ignore in case storage access is restricted
+}
 
 let unwatchState: (() => void) | undefined;
 let unwatchTranscript: (() => void) | undefined;
@@ -228,43 +330,47 @@ function queryDOMElements(): boolean {
   settingsDialog = sSettingsDialog;
   settingsCloseBtn = sSettingsCloseBtn;
   editionsListEl = eList;
+  settingsEditionsSectionEl = document.getElementById('settings-editions-section');
+  densityHintEl = document.getElementById('density-hint');
+  layerOrderListEl = document.getElementById('layer-order-list');
+  resetLayerOrderBtn = document.getElementById('reset-layer-order-btn') as HTMLButtonElement | null;
+  editionFilterPills = document.querySelectorAll<HTMLButtonElement>('.edition-filter-pill');
 
   return true;
 }
 
 function localizeUI(): void {
-  const bidiDir = browser.i18n.getMessage('@@bidi_dir');
-  if (bidiDir) document.documentElement.dir = bidiDir;
-  const uiLocale = browser.i18n.getUILanguage?.();
-  if (uiLocale) document.documentElement.lang = uiLocale;
-
-  for (const el of document.querySelectorAll<HTMLElement>('[data-i18n]')) {
-    const key = el.dataset.i18n as I18nKey | undefined;
-    if (key) el.textContent = browser.i18n.getMessage(key);
-  }
-
-  for (const el of document.querySelectorAll<HTMLElement>('[data-i18n-title]')) {
-    const key = el.dataset.i18nTitle as I18nKey | undefined;
-    if (key) el.title = browser.i18n.getMessage(key);
-  }
-
-  for (const el of document.querySelectorAll<HTMLInputElement>('[data-i18n-placeholder]')) {
-    const key = el.dataset.i18nPlaceholder as I18nKey | undefined;
-    if (key) el.placeholder = browser.i18n.getMessage(key);
-  }
+  localizeDOM();
+  updateDensityHint();
+  updateSurahTrigger(currentFeedSurah);
+  updateUI(currentCaptureState);
+  updateFollowReciterButton();
 }
 
 function updateSurahTrigger(surahNumber: number): void {
   const meta = SURAHS[surahNumber - 1];
   if (!meta) return;
   surahTriggerNumber.textContent = String(meta.number);
-  surahTriggerName.textContent = meta.nameEnglish;
-  const countMsg = browser.i18n.getMessage('versesCount', [String(meta.totalAyahs)]);
+  const isArabic = getEffectiveLanguage() === 'ar';
+  surahTriggerName.textContent = isArabic ? meta.nameArabic : meta.nameEnglish;
+  const countMsg = getMessage('versesCount', [String(meta.totalAyahs)]);
   surahTriggerCount.textContent = countMsg || `${meta.totalAyahs} verses`;
-  surahTriggerArabic.textContent = meta.nameArabic;
+  setSecondaryName(surahTriggerArabic, meta, isArabic);
+}
+
+/**
+ * Fills the secondary surah-name slot with the name in the other script, tagging
+ * language and direction so Latin names never inherit the Mushaf font or RTL flow.
+ */
+function setSecondaryName(el: HTMLElement, meta: SurahMeta, isArabicUi: boolean): void {
+  el.textContent = isArabicUi ? meta.nameEnglish : meta.nameArabic;
+  el.lang = isArabicUi ? 'en' : 'ar';
+  el.dir = isArabicUi ? 'ltr' : 'rtl';
 }
 
 function openSurahPicker(): void {
+  if (surahPickerDialog.open) return;
+  if (settingsDialog.open) settingsDialog.close();
   surahPickerTrigger.setAttribute('aria-expanded', 'true');
   currentSurahFilter = 'all';
   updateFilterPillsUI();
@@ -276,16 +382,21 @@ function openSurahPicker(): void {
   requestAnimationFrame(() => {
     const selectedEl = surahPickerList.querySelector('.surah-option--selected');
     if (selectedEl) {
-      selectedEl.scrollIntoView({ block: 'nearest' });
+      selectedEl.scrollIntoView({ block: 'center' });
     }
   });
 }
 
 function closeSurahPicker(): void {
-  surahPickerTrigger.setAttribute('aria-expanded', 'false');
   if (surahPickerDialog.open) {
     surahPickerDialog.close();
   }
+}
+
+// Runs for every close path (Escape, backdrop, close button, selection)
+function onSurahPickerClosed(): void {
+  surahPickerTrigger.setAttribute('aria-expanded', 'false');
+  surahSearchInput.removeAttribute('aria-activedescendant');
   surahPickerTrigger.focus();
 }
 
@@ -302,8 +413,12 @@ function onSurahPickerBackdropClick(event: MouseEvent): void {
   }
 }
 
+function normalizeEasternArabicDigits(input: string): string {
+  return input.replace(/[٠-٩]/g, (d) => String(d.charCodeAt(0) - 0x0660));
+}
+
 function parseAyahJumpQuery(rawQuery: string): { surah: SurahMeta; ayah: number } | null {
-  const trimmed = rawQuery.trim();
+  const trimmed = normalizeEasternArabicDigits(rawQuery).trim();
   const match = trimmed.match(/^([a-zA-Z\u0600-\u06FF0-9\s\-']+?)[:\s]+(\d+)$/);
   if (!match) return null;
 
@@ -345,12 +460,9 @@ function parseAyahJumpQuery(rawQuery: string): { surah: SurahMeta; ayah: number 
 
 function updateFilterPillsUI(): void {
   surahFilterPills.forEach((pill) => {
-    const filter = pill.dataset.filter as SurahFilterType;
-    if (filter === currentSurahFilter) {
-      pill.classList.add('surah-filter-pill--active');
-    } else {
-      pill.classList.remove('surah-filter-pill--active');
-    }
+    const isActive = pill.dataset.filter === currentSurahFilter;
+    pill.classList.toggle('surah-filter-pill--active', isActive);
+    pill.setAttribute('aria-pressed', isActive ? 'true' : 'false');
   });
 }
 
@@ -365,7 +477,7 @@ function onFilterPillClick(e: Event): void {
 }
 
 function filterAndRenderSurahList(rawQuery: string): void {
-  const query = rawQuery.trim();
+  const query = normalizeEasternArabicDigits(rawQuery).trim();
   currentFilteredItems = [];
 
   const jumpTarget = parseAyahJumpQuery(query);
@@ -411,11 +523,17 @@ function filterAndRenderSurahList(rawQuery: string): void {
   if (currentFilteredItems.length === 0) {
     surahPickerEmpty.hidden = false;
     currentHighlightedIndex = -1;
+    surahSearchInput.removeAttribute('aria-activedescendant');
     return;
   }
 
   surahPickerEmpty.hidden = true;
-  currentHighlightedIndex = 0;
+  const selectedIdx = !query
+    ? currentFilteredItems.findIndex(
+        (it) => it.type === 'surah' && it.surah.number === currentFeedSurah,
+      )
+    : -1;
+  currentHighlightedIndex = selectedIdx >= 0 ? selectedIdx : 0;
 
   const fragment = document.createDocumentFragment();
 
@@ -423,6 +541,7 @@ function filterAndRenderSurahList(rawQuery: string): void {
     const item = currentFilteredItems[idx];
     if (!item) continue;
     const opt = document.createElement('div');
+    opt.id = `surah-opt-${idx}`;
     opt.className = 'surah-option';
     opt.setAttribute('role', 'option');
     opt.dataset.index = String(idx);
@@ -443,13 +562,12 @@ function filterAndRenderSurahList(rawQuery: string): void {
       const meta = document.createElement('div');
       meta.className = 'surah-option__meta';
 
+      const isArabic = getEffectiveLanguage() === 'ar';
+      const surahDisplayName = isArabic ? item.surah.nameArabic : item.surah.nameEnglish;
       const name = document.createElement('span');
       name.className = 'surah-option__name';
-      const jumpMsg = browser.i18n.getMessage('jumpToAyah', [
-        item.surah.nameEnglish,
-        String(item.ayah),
-      ]);
-      name.textContent = jumpMsg || `Jump to ${item.surah.nameEnglish}, Ayah ${item.ayah}`;
+      const jumpMsg = getMessage('jumpToAyah', [surahDisplayName, String(item.ayah)]);
+      name.textContent = jumpMsg || `Jump to ${surahDisplayName}, Ayah ${item.ayah}`;
 
       const sub = document.createElement('div');
       sub.className = 'surah-option__sub';
@@ -467,6 +585,7 @@ function filterAndRenderSurahList(rawQuery: string): void {
         opt.setAttribute('aria-selected', 'true');
       }
 
+      const isArabic = getEffectiveLanguage() === 'ar';
       const lead = document.createElement('div');
       lead.className = 'surah-option__lead';
 
@@ -479,13 +598,13 @@ function filterAndRenderSurahList(rawQuery: string): void {
 
       const name = document.createElement('span');
       name.className = 'surah-option__name';
-      name.textContent = item.surah.nameEnglish;
+      name.textContent = isArabic ? item.surah.nameArabic : item.surah.nameEnglish;
 
       const sub = document.createElement('div');
       sub.className = 'surah-option__sub';
 
       const count = document.createElement('span');
-      const versesMsg = browser.i18n.getMessage('versesCount', [String(item.surah.totalAyahs)]);
+      const versesMsg = getMessage('versesCount', [String(item.surah.totalAyahs)]);
       count.textContent = versesMsg || `${item.surah.totalAyahs} verses`;
 
       const dot = document.createElement('span');
@@ -493,7 +612,7 @@ function filterAndRenderSurahList(rawQuery: string): void {
 
       const tag = document.createElement('span');
       tag.className = 'surah-option__tag';
-      tag.textContent = browser.i18n.getMessage(item.surah.revelation) || item.surah.revelation;
+      tag.textContent = getMessage(item.surah.revelation) || item.surah.revelation;
 
       sub.appendChild(count);
       sub.appendChild(dot);
@@ -506,7 +625,7 @@ function filterAndRenderSurahList(rawQuery: string): void {
 
       const arabic = document.createElement('span');
       arabic.className = 'surah-option__arabic';
-      arabic.textContent = item.surah.nameArabic;
+      setSecondaryName(arabic, item.surah, isArabic);
 
       opt.appendChild(lead);
       opt.appendChild(arabic);
@@ -516,6 +635,11 @@ function filterAndRenderSurahList(rawQuery: string): void {
   }
 
   surahPickerList.appendChild(fragment);
+  if (currentHighlightedIndex >= 0) {
+    surahSearchInput.setAttribute('aria-activedescendant', `surah-opt-${currentHighlightedIndex}`);
+  } else {
+    surahSearchInput.removeAttribute('aria-activedescendant');
+  }
 }
 
 function updateHighlightedItem(): void {
@@ -528,6 +652,11 @@ function updateHighlightedItem(): void {
       opt.classList.remove('surah-option--active');
     }
   });
+  if (currentHighlightedIndex >= 0) {
+    surahSearchInput.setAttribute('aria-activedescendant', `surah-opt-${currentHighlightedIndex}`);
+  } else {
+    surahSearchInput.removeAttribute('aria-activedescendant');
+  }
 }
 
 function onSurahPickerListClick(e: MouseEvent): void {
@@ -567,6 +696,7 @@ function onSurahKeyNavigation(e: KeyboardEvent): void {
       updateHighlightedItem();
     }
   } else if (e.key === 'Enter') {
+    if (e.target instanceof HTMLButtonElement) return;
     e.preventDefault();
     const item = currentFilteredItems[currentHighlightedIndex];
     if (item) {
@@ -641,6 +771,82 @@ function onGlobalKeyDown(e: KeyboardEvent): void {
   }
 }
 
+async function handleCopyAyah(ayah: CorpusAyah, btn: HTMLButtonElement): Promise<void> {
+  const showAr = currentUserPreferences.showArabic ?? true;
+  const activeTransId =
+    currentUserPreferences.activeTranslationId !== undefined
+      ? currentUserPreferences.activeTranslationId
+      : (currentUserPreferences.activeTranslationIds?.[0] ?? null);
+
+  const order = normalizeLayerOrder(currentUserPreferences.layerOrder);
+  const parts: string[] = [];
+
+  for (const layer of order) {
+    if (layer === 'arabic' && showAr) {
+      parts.push(`﴿${ayah.uthmani}﴾ [سورة ${ayah.surahNameArabic}: ${ayah.ayah}]`);
+    } else if (
+      layer === 'transliteration' &&
+      currentUserPreferences.showTransliteration &&
+      currentUserPreferences.activeTransliterationId
+    ) {
+      const translitEdition = activeEditions.get(currentUserPreferences.activeTransliterationId);
+      const translitText = translitEdition?.ayahs[ayah.index];
+      if (translitText) {
+        parts.push(`${translitText} [${ayah.surahNameEnglish} ${ayah.surah}:${ayah.ayah}]`);
+      }
+    } else if (layer === 'translation' && activeTransId) {
+      const transEdition = activeEditions.get(activeTransId);
+      const transText = transEdition?.ayahs[ayah.index];
+      if (transText) {
+        parts.push(`"${transText}" [${ayah.surahNameEnglish} ${ayah.surah}:${ayah.ayah}]`);
+      }
+    } else if (
+      layer === 'tafsir' &&
+      currentUserPreferences.showTafsir &&
+      currentUserPreferences.activeTafsirId
+    ) {
+      const tafsirEdition = activeEditions.get(currentUserPreferences.activeTafsirId);
+      const tafsirText = tafsirEdition?.ayahs[ayah.index];
+      if (tafsirText && tafsirEdition) {
+        parts.push(`${tafsirEdition.name}: ${tafsirText}`);
+      }
+    }
+  }
+
+  if (parts.length === 0) {
+    parts.push(`﴿${ayah.uthmani}﴾ [سورة ${ayah.surahNameArabic}: ${ayah.ayah}]`);
+  }
+
+  const textToCopy = parts.join('\n\n');
+
+  try {
+    await navigator.clipboard.writeText(textToCopy);
+    btn.classList.add('ayah-copy-btn--copied');
+    btn.innerHTML = `
+      <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M20 6 9 17l-5-5"/>
+      </svg>
+    `;
+    const copiedMsg = getMessage('copied') || 'Copied!';
+    btn.title = copiedMsg;
+    btn.setAttribute('aria-label', copiedMsg);
+    setTimeout(() => {
+      btn.classList.remove('ayah-copy-btn--copied');
+      const copyLabel = getMessage('copyAyah') || 'Copy verse';
+      btn.title = copyLabel;
+      btn.setAttribute('aria-label', `${copyLabel} ${ayah.surah}:${ayah.ayah}`);
+      btn.innerHTML = `
+        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+          <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+        </svg>
+      `;
+    }, 1500);
+  } catch (err) {
+    console.error('Failed to copy ayah to clipboard:', err);
+  }
+}
+
 function createAyahNumberPill(ayahNumber: number, direction: 'ltr' | 'rtl' = 'ltr'): HTMLElement {
   const pill = document.createElement('span');
   pill.className = 'ayah-inline-num';
@@ -665,24 +871,32 @@ function buildCardBody(
   const body = document.createElement('div');
   body.className = 'ayah-card__body';
 
-  let hasPrecedingContent = showAr;
+  const order = normalizeLayerOrder(currentUserPreferences.layerOrder);
+  let hasPrecedingContent = false;
 
-  if (showAr) {
-    const p = document.createElement('p');
-    p.className = 'ayah-card__text';
-    p.setAttribute('dir', 'rtl');
-    p.setAttribute('lang', 'ar');
-    p.textContent = `${ayah.uthmani}\u00A0${ayah.ayahMarker}`.trim();
-    body.appendChild(p);
-  }
+  for (const layer of order) {
+    if (layer === 'arabic') {
+      if (!showAr) continue;
+      const p = document.createElement('p');
+      p.className = hasPrecedingContent
+        ? 'ayah-card__text ayah-card__text--bordered'
+        : 'ayah-card__text';
+      p.setAttribute('dir', 'rtl');
+      p.setAttribute('lang', 'ar');
+      p.textContent = `${ayah.uthmani}\u00A0${ayah.ayahMarker}`.trim();
+      body.appendChild(p);
+      hasPrecedingContent = true;
+    } else if (layer === 'transliteration') {
+      if (
+        !currentUserPreferences.showTransliteration ||
+        !currentUserPreferences.activeTransliterationId
+      ) {
+        continue;
+      }
+      const translitEdition = activeEditions.get(currentUserPreferences.activeTransliterationId);
+      const text = translitEdition?.ayahs[ayah.index];
+      if (!text) continue;
 
-  if (
-    currentUserPreferences.showTransliteration &&
-    currentUserPreferences.activeTransliterationId
-  ) {
-    const translitEdition = activeEditions.get(currentUserPreferences.activeTransliterationId);
-    const text = translitEdition?.ayahs[ayah.index];
-    if (text) {
       const translitContainer = document.createElement('div');
       translitContainer.className = 'ayah-card__transliteration';
       translitContainer.setAttribute('dir', 'ltr');
@@ -700,56 +914,59 @@ function buildCardBody(
       translitContainer.appendChild(translitP);
       body.appendChild(translitContainer);
       hasPrecedingContent = true;
-    }
-  }
+    } else if (layer === 'translation') {
+      if (!activeTransId) continue;
+      const edition = activeEditions.get(activeTransId);
+      const text = edition?.ayahs[ayah.index];
+      if (!edition || !text) continue;
 
-  if (activeTransId) {
-    const edition = activeEditions.get(activeTransId);
-    if (edition) {
-      const text = edition.ayahs[ayah.index];
-      if (text) {
-        const transContainer = document.createElement('div');
-        transContainer.className = 'ayah-card__translations';
+      const transContainer = document.createElement('div');
+      transContainer.className = 'ayah-card__translations';
 
-        const block = document.createElement('div');
-        block.className = 'ayah-translation-block';
-        const direction = resolveEditionDirection(
-          edition.identifier,
-          edition.language,
-          edition.direction,
-        );
-        block.setAttribute('dir', direction);
-        if (!hasPrecedingContent) {
-          block.style.borderTop = 'none';
-          block.style.paddingTop = '0';
-        }
-
-        const label = document.createElement('span');
-        label.className = 'ayah-translation-label';
-        const labelBdi = document.createElement('bdi');
-        labelBdi.textContent = getLanguageEndonym(edition.language);
-        label.appendChild(labelBdi);
-
-        const p = document.createElement('p');
-        p.className = 'ayah-translation-text';
-        p.textContent = text;
-        p.appendChild(document.createTextNode(' '));
-        p.appendChild(createAyahNumberPill(ayah.ayah, direction));
-
-        block.appendChild(label);
-        block.appendChild(p);
-        transContainer.appendChild(block);
-        body.appendChild(transContainer);
+      const block = document.createElement('div');
+      block.className = 'ayah-translation-block';
+      const direction = resolveEditionDirection(
+        edition.identifier,
+        edition.language,
+        edition.direction,
+      );
+      block.setAttribute('dir', direction);
+      if (!hasPrecedingContent) {
+        block.style.borderTop = 'none';
+        block.style.paddingTop = '0';
       }
-    }
-  }
 
-  if (currentUserPreferences.showTafsir && currentUserPreferences.activeTafsirId) {
-    const tafsirEdition = activeEditions.get(currentUserPreferences.activeTafsirId);
-    const tafsirText = tafsirEdition?.ayahs[ayah.index];
-    if (tafsirText) {
+      const label = document.createElement('span');
+      label.className = 'ayah-translation-label';
+      const labelBdi = document.createElement('bdi');
+      labelBdi.textContent = getLanguageEndonym(edition.language);
+      label.appendChild(labelBdi);
+
+      const p = document.createElement('p');
+      p.className = 'ayah-translation-text';
+      p.textContent = text;
+      p.appendChild(document.createTextNode(' '));
+      p.appendChild(createAyahNumberPill(ayah.ayah, direction));
+
+      block.appendChild(label);
+      block.appendChild(p);
+      transContainer.appendChild(block);
+      body.appendChild(transContainer);
+      hasPrecedingContent = true;
+    } else if (layer === 'tafsir') {
+      if (!currentUserPreferences.showTafsir || !currentUserPreferences.activeTafsirId) {
+        continue;
+      }
+      const tafsirEdition = activeEditions.get(currentUserPreferences.activeTafsirId);
+      const tafsirText = tafsirEdition?.ayahs[ayah.index];
+      if (!tafsirEdition || !tafsirText) continue;
+
       const tafsirBlock = document.createElement('div');
       tafsirBlock.className = 'ayah-tafsir-block';
+      if (!hasPrecedingContent) {
+        tafsirBlock.style.marginBlockStart = '0';
+        tafsirBlock.style.borderBlockStart = 'none';
+      }
       const direction = resolveEditionDirection(
         tafsirEdition.identifier,
         tafsirEdition.language,
@@ -768,6 +985,30 @@ function buildCardBody(
       label.appendChild(labelBdi);
       labelRow.appendChild(label);
 
+      const isArabicUi =
+        document.documentElement.lang?.startsWith('ar') || tafsirEdition.language?.startsWith('ar');
+      const quranComBase = isArabicUi ? 'https://quran.com/ar' : 'https://quran.com';
+      const targetUrl = `${quranComBase}/${ayah.surah}/${ayah.ayah}/tafsirs`;
+
+      const deepDiveLink = document.createElement('a');
+      deepDiveLink.className = 'ayah-tafsir-link';
+      deepDiveLink.href = targetUrl;
+      deepDiveLink.target = '_blank';
+      deepDiveLink.rel = 'noopener noreferrer';
+      const deepDiveTitle = getMessage('tafsirDeepDive') || 'Read full Tafsir on Quran.com';
+      deepDiveLink.title = deepDiveTitle;
+      deepDiveLink.setAttribute('aria-label', `${deepDiveTitle} (${ayah.surah}:${ayah.ayah})`);
+      deepDiveLink.textContent = 'Quran.com ↗';
+      deepDiveLink.addEventListener('click', (e) => {
+        e.preventDefault();
+        if (typeof browser !== 'undefined' && browser.tabs?.create) {
+          void browser.tabs.create({ url: targetUrl });
+        } else {
+          window.open(targetUrl, '_blank', 'noopener,noreferrer');
+        }
+      });
+      labelRow.appendChild(deepDiveLink);
+
       const p = document.createElement('p');
       p.className = 'ayah-tafsir-text';
       p.textContent = tafsirText;
@@ -775,10 +1016,94 @@ function buildCardBody(
       tafsirBlock.appendChild(labelRow);
       tafsirBlock.appendChild(p);
       body.appendChild(tafsirBlock);
+      hasPrecedingContent = true;
     }
   }
 
   return body;
+}
+
+function populateSurahFeedHeaderMeta(metaRow: HTMLElement, meta: SurahMeta): void {
+  metaRow.innerHTML = '';
+  const isArabic = getEffectiveLanguage() === 'ar';
+
+  const nameEnSpan = document.createElement('span');
+  nameEnSpan.lang = 'en';
+  nameEnSpan.dir = 'ltr';
+  nameEnSpan.textContent = meta.nameEnglish;
+
+  const dot1 = document.createElement('span');
+  dot1.textContent = '•';
+
+  const countSpan = document.createElement('span');
+  countSpan.textContent =
+    getMessage('versesCount', [String(meta.totalAyahs)]) || `${meta.totalAyahs} verses`;
+
+  const dot2 = document.createElement('span');
+  dot2.textContent = '•';
+
+  const revSpan = document.createElement('span');
+  revSpan.textContent = getMessage(meta.revelation) || meta.revelation;
+
+  if (!isArabic) {
+    metaRow.appendChild(nameEnSpan);
+    metaRow.appendChild(dot1);
+  }
+  metaRow.appendChild(countSpan);
+  metaRow.appendChild(dot2);
+  metaRow.appendChild(revSpan);
+  if (isArabic) {
+    metaRow.appendChild(dot1);
+    metaRow.appendChild(nameEnSpan);
+  }
+}
+
+function populateSurahFeedNav(navEl: HTMLElement, surahNumber: number): void {
+  navEl.innerHTML = '';
+  const isArabic = getEffectiveLanguage() === 'ar';
+  const prevMeta = surahNumber > 1 ? SURAHS[surahNumber - 2] : undefined;
+  const nextMeta = surahNumber < 114 ? SURAHS[surahNumber] : undefined;
+
+  if (prevMeta) {
+    const prevBtn = document.createElement('button');
+    prevBtn.type = 'button';
+    prevBtn.className = 'surah-nav-btn surah-nav-btn--prev';
+    const prevLabel = document.createElement('span');
+    prevLabel.className = 'surah-nav-btn__label';
+    prevLabel.textContent = getMessage('previousSurah') || 'Previous Surah';
+    const prevName = document.createElement('span');
+    prevName.className = 'surah-nav-btn__name';
+    prevName.textContent = `${prevMeta.number}. ${isArabic ? prevMeta.nameArabic : prevMeta.nameEnglish}`;
+    prevBtn.appendChild(prevLabel);
+    prevBtn.appendChild(prevName);
+    prevBtn.addEventListener('click', () => {
+      selectSurahAndAyah(prevMeta.number, null);
+      surahFeedEl.scrollTo({ top: 0, behavior: 'smooth' });
+    });
+    navEl.appendChild(prevBtn);
+  } else {
+    const spacer = document.createElement('div');
+    navEl.appendChild(spacer);
+  }
+
+  if (nextMeta) {
+    const nextBtn = document.createElement('button');
+    nextBtn.type = 'button';
+    nextBtn.className = 'surah-nav-btn surah-nav-btn--next';
+    const nextLabel = document.createElement('span');
+    nextLabel.className = 'surah-nav-btn__label';
+    nextLabel.textContent = getMessage('nextSurah') || 'Next Surah';
+    const nextName = document.createElement('span');
+    nextName.className = 'surah-nav-btn__name';
+    nextName.textContent = `${nextMeta.number}. ${isArabic ? nextMeta.nameArabic : nextMeta.nameEnglish}`;
+    nextBtn.appendChild(nextLabel);
+    nextBtn.appendChild(nextName);
+    nextBtn.addEventListener('click', () => {
+      selectSurahAndAyah(nextMeta.number, null);
+      surahFeedEl.scrollTo({ top: 0, behavior: 'smooth' });
+    });
+    navEl.appendChild(nextBtn);
+  }
 }
 
 function renderSurahFeed(
@@ -823,6 +1148,14 @@ function renderSurahFeed(
       }
     }
 
+    const headerMeta = surahFeedEl.querySelector<HTMLElement>('.surah-feed-header__meta');
+    if (headerMeta) {
+      populateSurahFeedHeaderMeta(headerMeta, meta);
+    }
+
+    const sajdahText = `۩ ${getMessage('sajdahBadge') || 'Sajdah'}`;
+    const copyLabel = getMessage('copyAyah') || 'Copy verse';
+
     for (let i = 0; i < verses.length; i++) {
       const ayah = verses[i] as CorpusAyah;
       const card = existingCards[i];
@@ -832,8 +1165,28 @@ function renderSurahFeed(
       if (oldBody) {
         card.replaceChild(newBody, oldBody);
       }
+      const progressSpan = card.querySelector<HTMLElement>('.ayah-card__progress');
+      if (progressSpan) {
+        progressSpan.textContent =
+          getMessage('ayahProgress', [String(ayah.ayah), String(ayah.totalAyahs)]) ||
+          `Verse ${ayah.ayah} of ${ayah.totalAyahs}`;
+      }
+      const sajdahBdi = card.querySelector<HTMLElement>('.ayah-card__sajdah-badge bdi');
+      if (sajdahBdi) {
+        sajdahBdi.textContent = sajdahText;
+      }
+      const copyBtn = card.querySelector<HTMLButtonElement>('.ayah-copy-btn');
+      if (copyBtn && !copyBtn.classList.contains('ayah-copy-btn--copied')) {
+        copyBtn.title = copyLabel;
+        copyBtn.setAttribute('aria-label', `${copyLabel} ${ayah.surah}:${ayah.ayah}`);
+      }
       const isActive = activeAyah === ayah.ayah;
       card.className = isActive ? 'ayah-card ayah-card--active' : 'ayah-card ayah-card--context';
+    }
+
+    const navEl = surahFeedEl.querySelector<HTMLElement>('.surah-feed-nav');
+    if (navEl) {
+      populateSurahFeedNav(navEl, surahNumber);
     }
 
     if (isUserFollowing && activeAyah) {
@@ -860,19 +1213,7 @@ function renderSurahFeed(
 
   const metaRow = document.createElement('div');
   metaRow.className = 'surah-feed-header__meta';
-
-  const titleEn = document.createElement('span');
-  titleEn.textContent = meta.nameEnglish;
-
-  const dot = document.createElement('span');
-  dot.textContent = '•';
-
-  const countSpan = document.createElement('span');
-  countSpan.textContent = `${meta.totalAyahs} Ayahs`;
-
-  metaRow.appendChild(titleEn);
-  metaRow.appendChild(dot);
-  metaRow.appendChild(countSpan);
+  populateSurahFeedHeaderMeta(metaRow, meta);
 
   header.appendChild(titleAr);
   header.appendChild(metaRow);
@@ -900,21 +1241,25 @@ function renderSurahFeed(
     const cardHeader = document.createElement('header');
     cardHeader.className = 'ayah-card__header';
 
-    const surahInfo = document.createElement('div');
-    surahInfo.className = 'ayah-card__surah-info';
+    const cardMeta = document.createElement('div');
+    cardMeta.className = 'ayah-card__meta';
 
-    const surahArSpan = document.createElement('span');
-    surahArSpan.className = 'ayah-card__surah-arabic';
-    surahArSpan.setAttribute('dir', 'rtl');
-    surahArSpan.setAttribute('lang', 'ar');
-    surahArSpan.textContent = `سورة ${ayah.surahNameArabic}`;
+    const ayahBadge = document.createElement('div');
+    ayahBadge.className = 'ayah-card__badge';
+    ayahBadge.setAttribute('dir', 'ltr');
+    const badgeBdi = document.createElement('bdi');
+    badgeBdi.setAttribute('dir', 'ltr');
+    badgeBdi.textContent = `${ayah.surah}:${ayah.ayah}`;
+    ayahBadge.appendChild(badgeBdi);
 
-    const surahEnSpan = document.createElement('span');
-    surahEnSpan.className = 'ayah-card__surah-english';
-    surahEnSpan.textContent = `${ayah.surahNameEnglish} ${ayah.surah}:${ayah.ayah}`;
+    const progressSpan = document.createElement('span');
+    progressSpan.className = 'ayah-card__progress';
+    progressSpan.textContent =
+      getMessage('ayahProgress', [String(ayah.ayah), String(ayah.totalAyahs)]) ||
+      `Verse ${ayah.ayah} of ${ayah.totalAyahs}`;
 
-    surahInfo.appendChild(surahArSpan);
-    surahInfo.appendChild(surahEnSpan);
+    cardMeta.appendChild(ayahBadge);
+    cardMeta.appendChild(progressSpan);
 
     const badges = document.createElement('div');
     badges.className = 'ayah-card__badges';
@@ -923,22 +1268,31 @@ function renderSurahFeed(
       const sajdahBadge = document.createElement('span');
       sajdahBadge.className = 'ayah-card__sajdah-badge';
       const sajdahBdi = document.createElement('bdi');
-      const sajdahText = browser.i18n.getMessage('sajdahBadge') || 'Sajdah';
+      const sajdahText = getMessage('sajdahBadge') || 'Sajdah';
       sajdahBdi.textContent = `۩ ${sajdahText}`;
       sajdahBadge.appendChild(sajdahBdi);
       badges.appendChild(sajdahBadge);
     }
 
-    const ayahBadge = document.createElement('div');
-    ayahBadge.className = 'ayah-card__badge';
-    ayahBadge.setAttribute('dir', 'ltr');
-    const badgeBdi = document.createElement('bdi');
-    badgeBdi.setAttribute('dir', 'ltr');
-    badgeBdi.textContent = `${ayah.surah}:${ayah.ayah} (${ayah.ayah}/${ayah.totalAyahs})`;
-    ayahBadge.appendChild(badgeBdi);
-    badges.appendChild(ayahBadge);
+    const copyBtn = document.createElement('button');
+    copyBtn.type = 'button';
+    copyBtn.className = 'ayah-copy-btn';
+    const copyLabel = getMessage('copyAyah') || 'Copy verse';
+    copyBtn.title = copyLabel;
+    copyBtn.setAttribute('aria-label', `${copyLabel} ${ayah.surah}:${ayah.ayah}`);
+    copyBtn.innerHTML = `
+      <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+      </svg>
+    `;
+    copyBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      void handleCopyAyah(ayah, copyBtn);
+    });
+    badges.appendChild(copyBtn);
 
-    cardHeader.appendChild(surahInfo);
+    cardHeader.appendChild(cardMeta);
     cardHeader.appendChild(badges);
     card.appendChild(cardHeader);
 
@@ -946,6 +1300,11 @@ function renderSurahFeed(
     card.appendChild(body);
     fragment.appendChild(card);
   }
+
+  const navFooter = document.createElement('nav');
+  navFooter.className = 'surah-feed-nav';
+  populateSurahFeedNav(navFooter, surahNumber);
+  fragment.appendChild(navFooter);
 
   surahFeedEl.appendChild(fragment);
 }
@@ -992,9 +1351,12 @@ function updateFollowReciterButton(): void {
   }
 
   followReciterBtn.hidden = false;
-  const followMsg = browser.i18n.getMessage('followReciter') || 'Follow Reciter';
+  const followMsg = getMessage('followReciter') || 'Follow Reciter';
+  const isArabic = getEffectiveLanguage() === 'ar';
   const meta = SURAHS[currentMatchedAyah.surah - 1];
-  const surahName = meta?.nameEnglish ?? `Surah ${currentMatchedAyah.surah}`;
+  const surahName = isArabic
+    ? (meta?.nameArabic ?? `${currentMatchedAyah.surah}`)
+    : (meta?.nameEnglish ?? `Surah ${currentMatchedAyah.surah}`);
   followReciterTextEl.textContent = `${followMsg} (${surahName} ${currentMatchedAyah.ayah})`;
 }
 
@@ -1122,6 +1484,7 @@ async function hydrateState(): Promise<void> {
     transcriptItem.getValue(),
     matchedAyahItem.getValue(),
     userPreferencesItem.getValue(),
+    refreshCachedEditionIds(),
   ]);
 
   currentCaptureState = state;
@@ -1134,7 +1497,10 @@ async function hydrateState(): Promise<void> {
         prefs.activeTranslationId !== undefined
           ? prefs.activeTranslationId
           : (prefs.activeTranslationIds?.[0] ?? null),
+      layerOrder: normalizeLayerOrder(prefs.layerOrder),
     };
+    applyAppearancePreferences();
+    localizeUI();
   }
 
   activeEditions = await loadActiveEditions(currentUserPreferences);
@@ -1149,7 +1515,7 @@ async function hydrateState(): Promise<void> {
     }
   }
 
-  await updateToolbarControls();
+  updateToolbarControlsSync();
 
   const initialSurah = currentMatchedAyah?.surah ?? 1;
   const initialAyah = currentMatchedAyah?.ayah ?? null;
@@ -1223,7 +1589,9 @@ async function handleToggle(): Promise<void> {
 function updateUI(state: CaptureStateValue): void {
   currentCaptureState = state;
   const isCapturing = state === CaptureState.CAPTURING;
-  const isTransitioning = state === CaptureState.STARTING || state === CaptureState.STOPPING;
+  const isStarting = state === CaptureState.STARTING;
+  const isStopping = state === CaptureState.STOPPING;
+  const isTransitioning = isStarting || isStopping;
 
   if (isCapturing) {
     activeTabRequired = false;
@@ -1231,15 +1599,19 @@ function updateUI(state: CaptureStateValue): void {
     toggleBtn.hidden = false;
     toggleBtn.disabled = isToggling;
     toggleBtn.className = 'btn btn--danger';
-    toggleBtn.textContent = browser.i18n.getMessage('stopCapture');
+    toggleBtn.textContent = getMessage('stopCapture');
     toggleBtn.setAttribute('aria-busy', 'false');
     listeningIndicator.hidden = currentMatchedAyah !== null;
+    statusEl.textContent = getMessage('statusCapturing');
   } else if (isTransitioning) {
     idleHint.hidden = true;
     toggleBtn.hidden = false;
     toggleBtn.disabled = true;
     toggleBtn.setAttribute('aria-busy', 'true');
     listeningIndicator.hidden = false;
+    const transitionText = getMessage(isStarting ? 'statusStarting' : 'statusStopping');
+    toggleBtn.textContent = transitionText;
+    statusEl.textContent = transitionText;
   } else {
     toggleBtn.setAttribute('aria-busy', 'false');
     listeningIndicator.hidden = true;
@@ -1247,7 +1619,8 @@ function updateUI(state: CaptureStateValue): void {
     toggleBtn.hidden = false;
     toggleBtn.disabled = isToggling;
     toggleBtn.className = 'btn btn--primary';
-    toggleBtn.textContent = browser.i18n.getMessage('startCapture');
+    toggleBtn.textContent = getMessage('startCapture');
+    statusEl.textContent = getMessage('statusIdle');
 
     if (activeTabRequired) {
       idleHint.hidden = false;
@@ -1256,7 +1629,6 @@ function updateUI(state: CaptureStateValue): void {
     }
   }
 
-  statusEl.textContent = browser.i18n.getMessage(isCapturing ? 'statusCapturing' : 'statusIdle');
   statusEl.className = `status status--${state}`;
 }
 
@@ -1271,8 +1643,8 @@ function handleTranscriptError(text: string): void {
   }
 }
 
-async function populateTranslationSelect(): Promise<void> {
-  const cachedIds = new Set(await getCachedEditionIds());
+function populateTranslationSelectSync(): void {
+  const cachedIds = cachedEditionIdsSet;
   const activeTransId =
     currentUserPreferences.activeTranslationId !== undefined
       ? currentUserPreferences.activeTranslationId
@@ -1282,7 +1654,7 @@ async function populateTranslationSelect(): Promise<void> {
 
   const noTransOpt = document.createElement('option');
   noTransOpt.value = 'none';
-  noTransOpt.textContent = browser.i18n.getMessage('noTranslation') || 'No Translation';
+  noTransOpt.textContent = getMessage('noTranslation') || 'No Translation';
   translationSelectEl.appendChild(noTransOpt);
 
   const translationEditions = CURATED_EDITIONS.filter((e) => e.type === 'translation');
@@ -1297,8 +1669,7 @@ async function populateTranslationSelect(): Promise<void> {
 
   const downloadMoreOpt = document.createElement('option');
   downloadMoreOpt.value = '__settings__';
-  downloadMoreOpt.textContent =
-    browser.i18n.getMessage('downloadMore') || '+ Download Languages...';
+  downloadMoreOpt.textContent = getMessage('downloadMore') || '+ Download Languages...';
   translationSelectEl.appendChild(downloadMoreOpt);
 
   if (activeTransId && cachedIds.has(activeTransId)) {
@@ -1308,10 +1679,22 @@ async function populateTranslationSelect(): Promise<void> {
   }
 }
 
-async function updateToolbarControls(): Promise<void> {
+function updateToolbarControlsSync(): void {
   const showArabic = currentUserPreferences.showArabic ?? true;
-  toggleArabicBtn.className = showArabic ? 'pill-btn pill-btn--active' : 'pill-btn';
+  const isArabicSoleLayer =
+    showArabic &&
+    !currentUserPreferences.activeTranslationId &&
+    !currentUserPreferences.showTransliteration;
+  toggleArabicBtn.className = showArabic
+    ? isArabicSoleLayer
+      ? 'pill-btn pill-btn--active pill-btn--locked'
+      : 'pill-btn pill-btn--active'
+    : 'pill-btn';
   toggleArabicBtn.setAttribute('aria-pressed', showArabic ? 'true' : 'false');
+  toggleArabicBtn.title = isArabicSoleLayer
+    ? getMessage('arabicLocked') ||
+      'Enable a translation or transliteration first to hide Arabic text'
+    : getMessage('toggleArabic') || 'Toggle Arabic Script';
 
   const translitId = currentUserPreferences.activeTransliterationId;
   const isDownloadingTranslit = downloadingEditions.has(translitId);
@@ -1335,7 +1718,14 @@ async function updateToolbarControls(): Promise<void> {
   }
   toggleTafsirBtn.setAttribute('aria-pressed', showTafsir ? 'true' : 'false');
 
-  await populateTranslationSelect();
+  populateTranslationSelectSync();
+}
+
+async function updateToolbarControls(refreshCache = false): Promise<void> {
+  if (refreshCache) {
+    await refreshCachedEditionIds();
+  }
+  updateToolbarControlsSync();
 }
 
 async function onArabicToggle(): Promise<void> {
@@ -1356,9 +1746,9 @@ async function onArabicToggle(): Promise<void> {
     showArabic: nextShow,
   };
 
-  await userPreferencesItem.setValue(currentUserPreferences);
-  await updateToolbarControls();
+  updateToolbarControlsSync();
   renderSurahFeed(currentFeedSurah, currentActiveAyahNumber);
+  await userPreferencesItem.setValue(currentUserPreferences);
 }
 
 async function onTranslitToggle(): Promise<void> {
@@ -1369,7 +1759,11 @@ async function onTranslationChange(): Promise<void> {
   const value = translationSelectEl.value;
   if (value === '__settings__') {
     translationSelectEl.value = currentUserPreferences.activeTranslationId ?? 'none';
+    currentEditionFilter = 'translation';
     onSettingsOpen();
+    requestAnimationFrame(() => {
+      settingsEditionsSectionEl?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
     return;
   }
 
@@ -1390,7 +1784,13 @@ function createEditionItem(edition: EditionMetadata, cachedIds: Set<string>): HT
           currentUserPreferences.activeTransliterationId === edition.identifier;
 
   const item = document.createElement('div');
-  item.className = isActive ? 'edition-item edition-item--active' : 'edition-item';
+  item.className = [
+    'edition-item',
+    isCached ? 'edition-item--cached' : '',
+    isActive ? 'edition-item--active' : '',
+  ]
+    .filter(Boolean)
+    .join(' ');
 
   const header = document.createElement('div');
   header.className = 'edition-item__header';
@@ -1407,21 +1807,22 @@ function createEditionItem(edition: EditionMetadata, cachedIds: Set<string>): HT
   if (isDownloading) {
     const badge = document.createElement('span');
     badge.className = 'badge badge--downloading';
-    badge.textContent = browser.i18n.getMessage('downloading') || 'Downloading...';
+    badge.textContent = getMessage('downloading') || 'Downloading...';
     action.appendChild(badge);
   } else if (isCached) {
     const badge = document.createElement('span');
     badge.className = 'badge badge--downloaded';
-    badge.textContent = `✓ ${browser.i18n.getMessage('downloaded') || 'Downloaded'}`;
+    badge.textContent = `✓ ${getMessage('downloaded') || 'Downloaded'}`;
     action.appendChild(badge);
 
     const btnRemove = document.createElement('button');
     btnRemove.type = 'button';
     btnRemove.className = 'btn-remove';
-    btnRemove.textContent = browser.i18n.getMessage('remove') || 'Remove';
+    btnRemove.textContent = getMessage('remove') || 'Remove';
     btnRemove.setAttribute(
       'aria-label',
-      `Remove ${edition.nativeName} (${edition.language}) download`,
+      getMessage('removeEdition', [edition.nativeName]) ||
+        `Remove ${edition.nativeName} (${edition.language}) download`,
     );
 
     btnRemove.addEventListener('click', async (e) => {
@@ -1435,19 +1836,19 @@ function createEditionItem(edition: EditionMetadata, cachedIds: Set<string>): HT
     if (isOffline) {
       const offlineNotice = document.createElement('span');
       offlineNotice.className = 'badge badge--info';
-      offlineNotice.textContent =
-        browser.i18n.getMessage('offlineNotice') || 'Offline - connect to download';
+      offlineNotice.textContent = getMessage('offlineNotice') || 'Offline - connect to download';
       action.appendChild(offlineNotice);
     } else {
       const btnDownload = document.createElement('button');
       btnDownload.type = 'button';
       btnDownload.className = 'btn-download';
-      const dlText = browser.i18n.getMessage('download') || 'Download';
-      const sizeText = browser.i18n.getMessage('approxSize') || '~1.2 MB';
+      const dlText = getMessage('download') || 'Download';
+      const sizeText = getMessage('approxSize') || '~1.2 MB';
       btnDownload.textContent = `${dlText} (${sizeText})`;
       btnDownload.setAttribute(
         'aria-label',
-        `Download ${edition.nativeName} (${edition.language})`,
+        getMessage('downloadEdition', [edition.nativeName]) ||
+          `Download ${edition.nativeName} (${edition.language})`,
       );
 
       btnDownload.addEventListener('click', async (e) => {
@@ -1467,7 +1868,7 @@ function createEditionItem(edition: EditionMetadata, cachedIds: Set<string>): HT
 
   const langTag = document.createElement('span');
   langTag.className = 'edition-item__lang-tag';
-  const tafsirLabel = browser.i18n.getMessage('tafsir') || 'Tafsir';
+  const tafsirLabel = getMessage('tafsir') || 'Tafsir';
   langTag.textContent =
     edition.type === 'transliteration'
       ? `Aa · ${edition.language.toUpperCase()}`
@@ -1501,17 +1902,28 @@ function createEditionItem(edition: EditionMetadata, cachedIds: Set<string>): HT
   if (isCached) {
     item.addEventListener('click', async () => {
       if (edition.type === 'translation') {
-        await selectTranslation(edition.identifier);
+        const nextId =
+          currentUserPreferences.activeTranslationId === edition.identifier
+            ? null
+            : edition.identifier;
+        await selectTranslation(nextId);
       } else if (edition.type === 'transliteration') {
-        currentUserPreferences = {
-          ...currentUserPreferences,
-          activeTransliterationId: edition.identifier,
-          showTransliteration: true,
-        };
-        await userPreferencesItem.setValue(currentUserPreferences);
-        renderSurahFeed(currentFeedSurah, currentActiveAyahNumber);
-        await updateToolbarControls();
-        await renderSettings();
+        const isCurrentlyActive =
+          currentUserPreferences.showTransliteration &&
+          currentUserPreferences.activeTransliterationId === edition.identifier;
+        if (isCurrentlyActive) {
+          await handleTransliterationToggle(false);
+        } else {
+          currentUserPreferences = {
+            ...currentUserPreferences,
+            activeTransliterationId: edition.identifier,
+            showTransliteration: true,
+          };
+          await userPreferencesItem.setValue(currentUserPreferences);
+          renderSurahFeed(currentFeedSurah, currentActiveAyahNumber);
+          await updateToolbarControls();
+          await renderSettings();
+        }
       } else if (edition.type === 'tafsir') {
         const willEnable =
           !currentUserPreferences.showTafsir ||
@@ -1526,41 +1938,237 @@ function createEditionItem(edition: EditionMetadata, cachedIds: Set<string>): HT
   return item;
 }
 
-async function renderSettings(): Promise<void> {
-  const cachedIds = new Set(await getCachedEditionIds());
+function getLayerLabel(layer: CardLayer): string {
+  switch (layer) {
+    case 'arabic':
+      return getMessage('layerArabic') || 'Arabic Script';
+    case 'transliteration':
+      return getMessage('layerTransliteration') || 'Transliteration';
+    case 'translation':
+      return getMessage('layerTranslation') || 'Translation';
+    case 'tafsir':
+      return getMessage('layerTafsir') || 'Tafsir';
+  }
+}
+
+async function moveLayer(index: number, delta: -1 | 1): Promise<void> {
+  const order = normalizeLayerOrder(currentUserPreferences.layerOrder);
+  const targetIndex = index + delta;
+  if (targetIndex < 0 || targetIndex >= order.length) return;
+
+  const currentItem = order[index];
+  const targetItem = order[targetIndex];
+  if (!currentItem || !targetItem) return;
+
+  order[index] = targetItem;
+  order[targetIndex] = currentItem;
+
+  currentUserPreferences = {
+    ...currentUserPreferences,
+    layerOrder: order,
+  };
+
+  renderLayerOrderList();
+  renderSurahFeed(currentFeedSurah, currentActiveAyahNumber);
+  await userPreferencesItem.setValue(currentUserPreferences);
+}
+
+async function onResetLayerOrder(): Promise<void> {
+  currentUserPreferences = {
+    ...currentUserPreferences,
+    layerOrder: [...DEFAULT_LAYER_ORDER],
+  };
+  renderLayerOrderList();
+  renderSurahFeed(currentFeedSurah, currentActiveAyahNumber);
+  await userPreferencesItem.setValue(currentUserPreferences);
+}
+
+function renderLayerOrderList(): void {
+  if (!layerOrderListEl) return;
+  const order = normalizeLayerOrder(currentUserPreferences.layerOrder);
+  const isCustomOrder = order.some((layer, idx) => layer !== DEFAULT_LAYER_ORDER[idx]);
+  if (resetLayerOrderBtn) {
+    resetLayerOrderBtn.hidden = !isCustomOrder;
+  }
+
+  layerOrderListEl.innerHTML = '';
+
+  order.forEach((layer, idx) => {
+    const row = document.createElement('li');
+    row.className = 'layer-order-item';
+
+    const lead = document.createElement('div');
+    lead.className = 'layer-order-item__lead';
+
+    const step = document.createElement('span');
+    step.className = 'layer-order-item__step';
+    step.textContent = String(idx + 1);
+
+    const name = document.createElement('span');
+    name.className = 'layer-order-item__name';
+    const labelText = getLayerLabel(layer);
+    name.textContent = labelText;
+
+    lead.appendChild(step);
+    lead.appendChild(name);
+
+    const actions = document.createElement('div');
+    actions.className = 'layer-order-item__actions';
+
+    const upBtn = document.createElement('button');
+    upBtn.type = 'button';
+    upBtn.className = 'layer-order-btn';
+    upBtn.disabled = idx === 0;
+    const upLabel = getMessage('moveLayerUp', [labelText]) || `Move ${labelText} up`;
+    upBtn.title = upLabel;
+    upBtn.setAttribute('aria-label', upLabel);
+    upBtn.innerHTML = `
+      <svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="m4 10 4-4 4 4"/>
+      </svg>
+    `;
+    upBtn.addEventListener('click', () => {
+      void moveLayer(idx, -1);
+    });
+
+    const downBtn = document.createElement('button');
+    downBtn.type = 'button';
+    downBtn.className = 'layer-order-btn';
+    downBtn.disabled = idx === order.length - 1;
+    const downLabel = getMessage('moveLayerDown', [labelText]) || `Move ${labelText} down`;
+    downBtn.title = downLabel;
+    downBtn.setAttribute('aria-label', downLabel);
+    downBtn.innerHTML = `
+      <svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="m4 6 4 4 4-4"/>
+      </svg>
+    `;
+    downBtn.addEventListener('click', () => {
+      void moveLayer(idx, 1);
+    });
+
+    actions.appendChild(upBtn);
+    actions.appendChild(downBtn);
+
+    row.appendChild(lead);
+    row.appendChild(actions);
+    layerOrderListEl?.appendChild(row);
+  });
+}
+
+function updateEditionFilterPillsUI(): void {
+  editionFilterPills?.forEach((pill) => {
+    const isActive = pill.dataset.editionFilter === currentEditionFilter;
+    pill.classList.toggle('edition-filter-pill--active', isActive);
+    pill.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+  });
+}
+
+function onEditionFilterPillClick(e: Event): void {
+  const target = e.currentTarget as HTMLButtonElement;
+  const filter = target.dataset.editionFilter as EditionFilterType | undefined;
+  if (filter && filter !== currentEditionFilter) {
+    currentEditionFilter = filter;
+    updateEditionFilterPillsUI();
+    renderSettingsSync();
+  }
+}
+
+function sortEditionsByInstalledFirst(
+  editions: readonly EditionMetadata[],
+  cachedIds: Set<string>,
+): EditionMetadata[] {
+  return [...editions].sort((a, b) => {
+    const aCached = cachedIds.has(a.identifier) ? 1 : 0;
+    const bCached = cachedIds.has(b.identifier) ? 1 : 0;
+    return bCached - aCached;
+  });
+}
+
+function renderSettingsSync(): void {
+  const currentTheme = currentUserPreferences.theme ?? 'system';
+  const effectiveLang = getEffectiveLanguage();
+  const currentSize = currentUserPreferences.arabicFontSize ?? 'normal';
+  const currentDensity = currentUserPreferences.readingDensity ?? 'comfortable';
+
+  const themeRadio = document.querySelector<HTMLInputElement>(
+    `input[name="pref-theme"][value="${currentTheme}"]`,
+  );
+  if (themeRadio) themeRadio.checked = true;
+
+  const languageRadio = document.querySelector<HTMLInputElement>(
+    `input[name="pref-language"][value="${effectiveLang}"]`,
+  );
+  if (languageRadio) languageRadio.checked = true;
+
+  const sizeRadio = document.querySelector<HTMLInputElement>(
+    `input[name="pref-font-size"][value="${currentSize}"]`,
+  );
+  if (sizeRadio) sizeRadio.checked = true;
+
+  const densityRadio = document.querySelector<HTMLInputElement>(
+    `input[name="pref-density"][value="${currentDensity}"]`,
+  );
+  if (densityRadio) densityRadio.checked = true;
+
+  updateDensityHint();
+  renderLayerOrderList();
+  updateEditionFilterPillsUI();
+
+  const cachedIds = cachedEditionIdsSet;
   editionsListEl.innerHTML = '';
 
-  const translations = getAvailableTranslations();
-  const transliterations = getAvailableTransliterations();
+  const showAll = currentEditionFilter === 'all';
 
-  const transHeader = document.createElement('h3');
-  transHeader.className = 'settings-group-header';
-  transHeader.textContent = browser.i18n.getMessage('availableTranslations') || 'Translations';
-  editionsListEl.appendChild(transHeader);
-
-  for (const edition of translations) {
-    editionsListEl.appendChild(createEditionItem(edition, cachedIds));
+  if (showAll || currentEditionFilter === 'translation') {
+    const translations = sortEditionsByInstalledFirst(getAvailableTranslations(), cachedIds);
+    if (showAll) {
+      const transHeader = document.createElement('h3');
+      transHeader.className = 'settings-group-header';
+      transHeader.textContent = getMessage('availableTranslations') || 'Translations';
+      editionsListEl.appendChild(transHeader);
+    }
+    for (const edition of translations) {
+      editionsListEl.appendChild(createEditionItem(edition, cachedIds));
+    }
   }
 
-  const translitHeader = document.createElement('h3');
-  translitHeader.className = 'settings-group-header';
-  translitHeader.textContent =
-    browser.i18n.getMessage('availableTransliterations') || 'Phonetic Transliterations';
-  editionsListEl.appendChild(translitHeader);
-
-  for (const edition of transliterations) {
-    editionsListEl.appendChild(createEditionItem(edition, cachedIds));
+  if (showAll || currentEditionFilter === 'tafsir') {
+    const tafsirs = sortEditionsByInstalledFirst(getAvailableTafsirs(), cachedIds);
+    if (showAll) {
+      const tafsirHeader = document.createElement('h3');
+      tafsirHeader.className = 'settings-group-header';
+      tafsirHeader.textContent = getMessage('availableTafsirs') || 'Tafsir (Exegesis)';
+      editionsListEl.appendChild(tafsirHeader);
+    }
+    for (const edition of tafsirs) {
+      editionsListEl.appendChild(createEditionItem(edition, cachedIds));
+    }
   }
 
-  const tafsirs = getAvailableTafsirs();
-  const tafsirHeader = document.createElement('h3');
-  tafsirHeader.className = 'settings-group-header';
-  tafsirHeader.textContent = browser.i18n.getMessage('availableTafsirs') || 'Tafsir (Exegesis)';
-  editionsListEl.appendChild(tafsirHeader);
-
-  for (const edition of tafsirs) {
-    editionsListEl.appendChild(createEditionItem(edition, cachedIds));
+  if (showAll || currentEditionFilter === 'transliteration') {
+    const transliterations = sortEditionsByInstalledFirst(
+      getAvailableTransliterations(),
+      cachedIds,
+    );
+    if (showAll) {
+      const translitHeader = document.createElement('h3');
+      translitHeader.className = 'settings-group-header';
+      translitHeader.textContent =
+        getMessage('availableTransliterations') || 'Phonetic Transliterations';
+      editionsListEl.appendChild(translitHeader);
+    }
+    for (const edition of transliterations) {
+      editionsListEl.appendChild(createEditionItem(edition, cachedIds));
+    }
   }
+}
+
+async function renderSettings(refreshCache = false): Promise<void> {
+  if (refreshCache) {
+    await refreshCachedEditionIds();
+  }
+  renderSettingsSync();
 }
 
 async function selectTranslation(id: string | null): Promise<void> {
@@ -1619,11 +2227,12 @@ async function selectTranslation(id: string | null): Promise<void> {
 
 async function downloadEdition(id: string): Promise<void> {
   downloadingEditions.add(id);
-  await renderSettings();
+  renderSettingsSync();
 
   try {
     const edition = await fetchAndCacheEdition(id);
     activeEditions.set(id, edition);
+    cachedEditionIdsSet.add(id);
 
     if (edition.type === 'translation') {
       await selectTranslation(id);
@@ -1635,7 +2244,7 @@ async function downloadEdition(id: string): Promise<void> {
       };
       await userPreferencesItem.setValue(currentUserPreferences);
       renderSurahFeed(currentFeedSurah, currentActiveAyahNumber);
-      await updateToolbarControls();
+      updateToolbarControlsSync();
     } else if (edition.type === 'tafsir') {
       currentUserPreferences = {
         ...currentUserPreferences,
@@ -1644,14 +2253,15 @@ async function downloadEdition(id: string): Promise<void> {
       };
       await userPreferencesItem.setValue(currentUserPreferences);
       renderSurahFeed(currentFeedSurah, currentActiveAyahNumber);
-      await updateToolbarControls();
+      updateToolbarControlsSync();
     }
   } catch (err) {
     console.error(`Failed to download edition ${id}:`, err);
   } finally {
     downloadingEditions.delete(id);
-    await updateToolbarControls();
-    await renderSettings();
+    await refreshCachedEditionIds();
+    updateToolbarControlsSync();
+    renderSettingsSync();
   }
 }
 
@@ -1659,6 +2269,7 @@ async function removeEdition(id: string): Promise<void> {
   try {
     await deleteCachedEdition(id);
     activeEditions.delete(id);
+    cachedEditionIdsSet.delete(id);
 
     let nextShowArabic = currentUserPreferences.showArabic ?? true;
     let nextActiveTransId = currentUserPreferences.activeTranslationId;
@@ -1799,8 +2410,11 @@ async function onTafsirToggle(): Promise<void> {
 }
 
 function onSettingsOpen(): void {
-  void renderSettings();
-  settingsDialog.showModal();
+  renderSettingsSync();
+  void renderSettings(true);
+  if (!settingsDialog.open) {
+    settingsDialog.showModal();
+  }
 }
 
 function onSettingsClose(): void {
@@ -1820,6 +2434,10 @@ async function onOnline(): Promise<void> {
   await renderSettings();
 }
 
+function onOffline(): void {
+  void renderSettings();
+}
+
 async function init(): Promise<void> {
   if (!queryDOMElements()) return;
 
@@ -1836,8 +2454,9 @@ async function init(): Promise<void> {
   surahPickerTrigger.addEventListener('click', openSurahPicker);
   surahPickerCloseBtn.addEventListener('click', closeSurahPicker);
   surahPickerDialog.addEventListener('click', onSurahPickerBackdropClick);
+  surahPickerDialog.addEventListener('close', onSurahPickerClosed);
+  surahPickerDialog.addEventListener('keydown', onSurahKeyNavigation);
   surahSearchInput.addEventListener('input', onSurahSearchInput);
-  surahSearchInput.addEventListener('keydown', onSurahKeyNavigation);
   surahPickerList.addEventListener('click', onSurahPickerListClick);
   surahFilterPills.forEach((pill) => {
     pill.addEventListener('click', onFilterPillClick);
@@ -1852,7 +2471,85 @@ async function init(): Promise<void> {
   settingsBtn.addEventListener('click', onSettingsOpen);
   settingsCloseBtn.addEventListener('click', onSettingsClose);
   settingsDialog.addEventListener('click', onDialogClick);
+  resetLayerOrderBtn?.addEventListener('click', onResetLayerOrder);
+  editionFilterPills.forEach((pill) => {
+    pill.addEventListener('click', onEditionFilterPillClick);
+  });
+
+  const themeRadios = document.querySelectorAll<HTMLInputElement>('input[name="pref-theme"]');
+  themeRadios.forEach((radio) => {
+    radio.addEventListener('change', async (e) => {
+      const target = e.target as HTMLInputElement;
+      if (target.checked) {
+        const theme = target.value as AppTheme;
+        currentUserPreferences = { ...currentUserPreferences, theme };
+        applyAppearancePreferences();
+        try {
+          localStorage.setItem('theme', theme);
+        } catch {}
+        await userPreferencesItem.setValue(currentUserPreferences);
+      }
+    });
+  });
+
+  const languageRadios = document.querySelectorAll<HTMLInputElement>('input[name="pref-language"]');
+  languageRadios.forEach((radio) => {
+    radio.addEventListener('change', async (e) => {
+      const target = e.target as HTMLInputElement;
+      if (target.checked) {
+        const uiLanguage = target.value as UiLanguage;
+        currentUserPreferences = { ...currentUserPreferences, uiLanguage };
+        try {
+          localStorage.setItem('uiLanguage', uiLanguage);
+        } catch {}
+        withInstantLayoutChange(() => {
+          applyAppearancePreferences();
+          localizeUI();
+          renderSurahFeed(currentFeedSurah, currentActiveAyahNumber);
+          updateToolbarControlsSync();
+          renderSettingsSync();
+        });
+        await userPreferencesItem.setValue(currentUserPreferences);
+      }
+    });
+  });
+
+  const fontSizeRadios = document.querySelectorAll<HTMLInputElement>(
+    'input[name="pref-font-size"]',
+  );
+  fontSizeRadios.forEach((radio) => {
+    radio.addEventListener('change', async (e) => {
+      const target = e.target as HTMLInputElement;
+      if (target.checked) {
+        const arabicFontSize = target.value as ArabicFontSize;
+        currentUserPreferences = { ...currentUserPreferences, arabicFontSize };
+        applyAppearancePreferences();
+        try {
+          localStorage.setItem('arabicFontSize', arabicFontSize);
+        } catch {}
+        await userPreferencesItem.setValue(currentUserPreferences);
+      }
+    });
+  });
+
+  const densityRadios = document.querySelectorAll<HTMLInputElement>('input[name="pref-density"]');
+  densityRadios.forEach((radio) => {
+    radio.addEventListener('change', async (e) => {
+      const target = e.target as HTMLInputElement;
+      if (target.checked) {
+        const readingDensity = target.value as ReadingDensity;
+        currentUserPreferences = { ...currentUserPreferences, readingDensity };
+        applyAppearancePreferences();
+        try {
+          localStorage.setItem('readingDensity', readingDensity);
+        } catch {}
+        await userPreferencesItem.setValue(currentUserPreferences);
+      }
+    });
+  });
+
   window.addEventListener('online', onOnline);
+  window.addEventListener('offline', onOffline);
   window.addEventListener('beforeunload', cleanup);
 
   // Hydrate local corpus and state before listening to external mutations
@@ -1893,6 +2590,17 @@ async function init(): Promise<void> {
         (prefs.showTafsir ?? false) === (currentUserPreferences.showTafsir ?? false);
       const isTafsirIdSame =
         (prefs.activeTafsirId ?? null) === (currentUserPreferences.activeTafsirId ?? null);
+      const isLanguageSame =
+        (prefs.uiLanguage ?? 'system') === (currentUserPreferences.uiLanguage ?? 'system');
+      const isThemeSame = (prefs.theme ?? 'system') === (currentUserPreferences.theme ?? 'system');
+      const isFontSizeSame =
+        (prefs.arabicFontSize ?? 'normal') === (currentUserPreferences.arabicFontSize ?? 'normal');
+      const isDensitySame =
+        (prefs.readingDensity ?? 'comfortable') ===
+        (currentUserPreferences.readingDensity ?? 'comfortable');
+      const incomingOrder = normalizeLayerOrder(prefs.layerOrder);
+      const currentOrder = normalizeLayerOrder(currentUserPreferences.layerOrder);
+      const isLayerOrderSame = incomingOrder.every((l, i) => l === currentOrder[i]);
 
       // Skip echo updates already applied locally
       if (
@@ -1901,7 +2609,12 @@ async function init(): Promise<void> {
         isTranslitIdSame &&
         isTransSame &&
         isTafsirSame &&
-        isTafsirIdSame
+        isTafsirIdSame &&
+        isLanguageSame &&
+        isThemeSame &&
+        isFontSizeSame &&
+        isDensitySame &&
+        isLayerOrderSame
       ) {
         return;
       }
@@ -1910,12 +2623,21 @@ async function init(): Promise<void> {
         ...prefs,
         showArabic: prefs.showArabic ?? true,
         activeTranslationId: incomingTransId,
+        layerOrder: incomingOrder,
       };
+      applyAppearancePreferences();
+      try {
+        localStorage.setItem('theme', prefs.theme ?? 'system');
+        localStorage.setItem('arabicFontSize', prefs.arabicFontSize ?? 'normal');
+        localStorage.setItem('readingDensity', prefs.readingDensity ?? 'comfortable');
+        localStorage.setItem('uiLanguage', prefs.uiLanguage ?? 'system');
+      } catch {}
+      localizeUI();
       loadActiveEditions(currentUserPreferences).then((editions) => {
         activeEditions = editions;
         renderSurahFeed(currentFeedSurah, currentActiveAyahNumber);
-        void updateToolbarControls();
-        void renderSettings();
+        updateToolbarControlsSync();
+        renderSettingsSync();
       });
     }
   });
@@ -1949,8 +2671,9 @@ function cleanup(): void {
   surahPickerTrigger?.removeEventListener('click', openSurahPicker);
   surahPickerCloseBtn?.removeEventListener('click', closeSurahPicker);
   surahPickerDialog?.removeEventListener('click', onSurahPickerBackdropClick);
+  surahPickerDialog?.removeEventListener('close', onSurahPickerClosed);
+  surahPickerDialog?.removeEventListener('keydown', onSurahKeyNavigation);
   surahSearchInput?.removeEventListener('input', onSurahSearchInput);
-  surahSearchInput?.removeEventListener('keydown', onSurahKeyNavigation);
   surahPickerList?.removeEventListener('click', onSurahPickerListClick);
   surahFilterPills?.forEach((pill) => {
     pill.removeEventListener('click', onFilterPillClick);
@@ -1965,7 +2688,12 @@ function cleanup(): void {
   settingsBtn?.removeEventListener('click', onSettingsOpen);
   settingsCloseBtn?.removeEventListener('click', onSettingsClose);
   settingsDialog?.removeEventListener('click', onDialogClick);
+  resetLayerOrderBtn?.removeEventListener('click', onResetLayerOrder);
+  editionFilterPills?.forEach((pill) => {
+    pill.removeEventListener('click', onEditionFilterPillClick);
+  });
   window.removeEventListener('online', onOnline);
+  window.removeEventListener('offline', onOffline);
   window.removeEventListener('beforeunload', cleanup);
 }
 

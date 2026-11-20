@@ -3,6 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light dark" />
     <title>Quran Transcriber</title>
     <link rel="stylesheet" href="./style.css" />
   </head>
@@ -13,7 +14,7 @@
           <h1 class="title" data-i18n="extName">Quran Transcriber</h1>
           <span id="status" class="status status--idle" data-i18n="statusIdle" role="status" aria-live="polite">Ready</span>
         </div>
-        <button id="settings-btn" class="icon-btn" type="button" aria-label="Settings" data-i18n-title="settings" title="Settings">
+        <button id="settings-btn" class="icon-btn" type="button" aria-label="Settings" data-i18n-aria-label="settings" data-i18n-title="settings" title="Settings">
           <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <circle cx="12" cy="12" r="3" />
             <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
@@ -21,23 +22,26 @@
         </button>
       </header>
 
-      <nav class="display-bar" aria-label="Display options">
+      <nav class="display-bar" aria-label="Display options" data-i18n-aria-label="displayOptions">
         <div class="display-bar__toggles">
           <button id="toggle-arabic-btn" class="pill-btn pill-btn--active" type="button" aria-pressed="true" data-i18n-title="toggleArabic" title="Toggle Arabic text">
             عربي
           </button>
-          <button id="toggle-translit-btn" class="pill-btn" type="button" aria-pressed="false" data-i18n-title="toggleTransliteration" title="Toggle transliteration">
-            Aa
+          <button id="toggle-translit-btn" class="pill-btn" type="button" aria-pressed="false" data-i18n="translitShort" data-i18n-title="toggleTransliteration" title="Toggle transliteration">
+            Translit
           </button>
           <button id="toggle-tafsir-btn" class="pill-btn" type="button" aria-pressed="false" data-i18n="tafsir" data-i18n-title="toggleTafsir" title="Toggle Tafsir">
             Tafsir
           </button>
         </div>
         <div class="display-bar__select-wrap">
-          <select id="translation-select" class="select-translation" aria-label="Translation">
+          <select id="translation-select" class="select-translation" aria-label="Translation" data-i18n-aria-label="translation">
             <option value="none" data-i18n="noTranslation">No Translation</option>
             <option value="__settings__" data-i18n="downloadMore">+ Download Languages...</option>
           </select>
+          <svg class="select-translation__chevron" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="m6 9 6 6 6-6"/>
+          </svg>
         </div>
       </nav>
 
@@ -75,7 +79,7 @@
         <div class="surah-feed-container">
           <div id="surah-feed" class="surah-feed" role="feed" aria-busy="false"></div>
 
-          <button id="follow-reciter-btn" class="follow-pill" type="button" aria-label="Follow Reciter" hidden>
+          <button id="follow-reciter-btn" class="follow-pill" type="button" hidden>
             <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <circle cx="12" cy="12" r="9"/>
               <circle cx="12" cy="12" r="3" fill="currentColor"/>
@@ -97,8 +101,8 @@
     <dialog id="settings-dialog" class="settings-dialog" aria-labelledby="settings-title">
       <div class="settings-dialog__content">
         <header class="settings-dialog__header">
-          <h2 id="settings-title" class="settings-dialog__title" data-i18n="manageLanguages">Manage Languages</h2>
-          <button id="settings-close-btn" class="icon-btn" type="button" aria-label="Close">
+          <h2 id="settings-title" class="settings-dialog__title" data-i18n="settings">Settings</h2>
+          <button id="settings-close-btn" class="icon-btn" type="button" aria-label="Close" data-i18n-aria-label="close" data-i18n-title="close" title="Close">
             <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <line x1="18" y1="6" x2="6" y2="18" />
               <line x1="6" y1="6" x2="18" y2="18" />
@@ -108,16 +112,119 @@
         <div class="settings-dialog__body">
           <section class="settings-section">
             <div class="settings-section__header-row">
+              <h3 class="settings-section__title" data-i18n="appearance">Appearance &amp; Reading</h3>
+            </div>
+
+            <div class="settings-row">
+              <span id="theme-label" class="settings-row__label" data-i18n="theme">Theme</span>
+              <div class="segmented-control" role="radiogroup" aria-labelledby="theme-label" id="theme-control">
+                <label class="segmented-control__item">
+                  <input type="radio" name="pref-theme" value="system" class="visually-hidden" checked />
+                  <span class="segmented-control__button" data-i18n="themeSystem">System</span>
+                </label>
+                <label class="segmented-control__item">
+                  <input type="radio" name="pref-theme" value="light" class="visually-hidden" />
+                  <span class="segmented-control__button" data-i18n="themeLight">Light</span>
+                </label>
+                <label class="segmented-control__item">
+                  <input type="radio" name="pref-theme" value="dark" class="visually-hidden" />
+                  <span class="segmented-control__button" data-i18n="themeDark">Dark</span>
+                </label>
+                <label class="segmented-control__item">
+                  <input type="radio" name="pref-theme" value="sepia" class="visually-hidden" />
+                  <span class="segmented-control__button" data-i18n="themeSepia">Sepia</span>
+                </label>
+              </div>
+            </div>
+
+            <div class="settings-row">
+              <span id="language-label" class="settings-row__label" data-i18n="uiLanguage">Language</span>
+              <div class="segmented-control" role="radiogroup" aria-labelledby="language-label" id="language-control">
+                <label class="segmented-control__item">
+                  <input type="radio" name="pref-language" value="en" class="visually-hidden" checked />
+                  <span class="segmented-control__button">English</span>
+                </label>
+                <label class="segmented-control__item">
+                  <input type="radio" name="pref-language" value="ar" class="visually-hidden" />
+                  <span class="segmented-control__button">العربية</span>
+                </label>
+              </div>
+            </div>
+
+            <div class="settings-row">
+              <span id="font-size-label" class="settings-row__label" data-i18n="arabicFontSize">Text Size</span>
+              <div class="segmented-control" role="radiogroup" aria-labelledby="font-size-label" id="font-size-control">
+                <label class="segmented-control__item">
+                  <input type="radio" name="pref-font-size" value="normal" class="visually-hidden" checked />
+                  <span class="segmented-control__button" data-i18n="fontSizeNormal">Normal</span>
+                </label>
+                <label class="segmented-control__item">
+                  <input type="radio" name="pref-font-size" value="large" class="visually-hidden" />
+                  <span class="segmented-control__button" data-i18n="fontSizeLarge">Large</span>
+                </label>
+                <label class="segmented-control__item">
+                  <input type="radio" name="pref-font-size" value="xlarge" class="visually-hidden" />
+                  <span class="segmented-control__button" data-i18n="fontSizeXLarge">Extra Large</span>
+                </label>
+              </div>
+            </div>
+
+            <div class="settings-row">
+              <span id="density-label" class="settings-row__label" data-i18n="readingDensity">Display Density</span>
+              <div class="segmented-control" role="radiogroup" aria-labelledby="density-label" id="density-control">
+                <label class="segmented-control__item">
+                  <input type="radio" name="pref-density" value="comfortable" class="visually-hidden" checked />
+                  <span class="segmented-control__button">
+                    <svg class="segmented-control__icon" viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true">
+                      <rect x="2" y="2.5" width="12" height="4" rx="1" />
+                      <rect x="2" y="9.5" width="12" height="4" rx="1" />
+                    </svg>
+                    <span data-i18n="densityComfortable">Comfortable</span>
+                  </span>
+                </label>
+                <label class="segmented-control__item">
+                  <input type="radio" name="pref-density" value="compact" class="visually-hidden" />
+                  <span class="segmented-control__button">
+                    <svg class="segmented-control__icon" viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true">
+                      <line x1="2.5" y1="3.5" x2="13.5" y2="3.5" />
+                      <line x1="2.5" y1="8" x2="13.5" y2="8" />
+                      <line x1="2.5" y1="12.5" x2="13.5" y2="12.5" />
+                    </svg>
+                    <span data-i18n="densityCompact">Compact</span>
+                  </span>
+                </label>
+              </div>
+              <p id="density-hint" class="settings-row__hint" data-i18n="densityComfortableHint">Generous card spacing with full verse progress</p>
+            </div>
+
+            <div class="settings-row">
+              <div class="settings-row__header">
+                <span id="layer-order-label" class="settings-row__label" data-i18n="layerOrder">Verse Card Order</span>
+                <button id="reset-layer-order-btn" class="settings-link-btn" type="button" data-i18n="resetOrder" hidden>Reset</button>
+              </div>
+              <p class="settings-row__hint" data-i18n="layerOrderHint">Reorder how elements appear inside each verse card</p>
+              <ol id="layer-order-list" class="layer-order-list" aria-labelledby="layer-order-label"></ol>
+            </div>
+          </section>
+
+          <section id="settings-editions-section" class="settings-section">
+            <div class="settings-section__header-row">
               <h3 class="settings-section__title" data-i18n="availableLanguages">Available Languages</h3>
             </div>
             <p class="settings-section__hint" data-i18n="downloadHint">Download translations for offline use. Once downloaded, choose them directly from the toolbar.</p>
+            <fieldset class="settings-edition-filters" aria-label="Available Languages" data-i18n-aria-label="availableLanguages">
+              <button class="edition-filter-pill edition-filter-pill--active" type="button" data-edition-filter="all" data-i18n="editionFilterAll" aria-pressed="true">All</button>
+              <button class="edition-filter-pill" type="button" data-edition-filter="translation" data-i18n="editionFilterTranslations" aria-pressed="false">Translations</button>
+              <button class="edition-filter-pill" type="button" data-edition-filter="tafsir" data-i18n="editionFilterTafsir" aria-pressed="false">Tafsir</button>
+              <button class="edition-filter-pill" type="button" data-edition-filter="transliteration" data-i18n="editionFilterTranslit" aria-pressed="false">Transliteration</button>
+            </fieldset>
             <div id="editions-list" class="settings-editions-list"></div>
           </section>
         </div>
       </div>
     </dialog>
 
-    <dialog id="surah-picker-dialog" class="surah-dialog" aria-label="Surah Navigation">
+    <dialog id="surah-picker-dialog" class="surah-dialog" aria-label="Surah Navigation" data-i18n-aria-label="surahNavigation">
       <div class="surah-dialog__content">
         <header class="surah-dialog__header">
           <div class="surah-search-wrap">
@@ -125,9 +232,9 @@
               <circle cx="11" cy="11" r="8"/>
               <path d="m21 21-4.3-4.3"/>
             </svg>
-            <input id="surah-search-input" class="surah-search-input" type="search" data-i18n-placeholder="searchSurahPlaceholder" placeholder="Search surah, number, or ayah (e.g. 18, Kahf, 18:10)..." autocomplete="off" spellcheck="false" aria-label="Search Surahs" />
+            <input id="surah-search-input" class="surah-search-input" type="search" data-i18n-placeholder="searchSurahPlaceholder" placeholder="Search surah, number, or ayah (e.g. 18, Kahf, 18:10)..." autocomplete="off" spellcheck="false" aria-label="Search surahs" data-i18n-aria-label="searchSurahs" role="combobox" aria-expanded="true" aria-controls="surah-picker-list" aria-autocomplete="list" />
           </div>
-          <button id="surah-picker-close-btn" class="icon-btn" type="button" aria-label="Close" data-i18n-title="close" title="Close">
+          <button id="surah-picker-close-btn" class="icon-btn" type="button" aria-label="Close" data-i18n-aria-label="close" data-i18n-title="close" title="Close">
             <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <line x1="18" y1="6" x2="6" y2="18"/>
               <line x1="6" y1="6" x2="18" y2="18"/>
@@ -135,13 +242,13 @@
           </button>
         </header>
 
-        <div class="surah-dialog__filters">
-          <button class="surah-filter-pill surah-filter-pill--active" type="button" data-filter="all" data-i18n="allSurahs">All</button>
-          <button class="surah-filter-pill" type="button" data-filter="meccan" data-i18n="meccan">Meccan</button>
-          <button class="surah-filter-pill" type="button" data-filter="medinan" data-i18n="medinan">Medinan</button>
-        </div>
+        <fieldset class="surah-dialog__filters" aria-label="Revelation" data-i18n-aria-label="revelationFilter">
+          <button class="surah-filter-pill surah-filter-pill--active" type="button" data-filter="all" data-i18n="allSurahs" aria-pressed="true">All</button>
+          <button class="surah-filter-pill" type="button" data-filter="meccan" data-i18n="meccan" aria-pressed="false">Meccan</button>
+          <button class="surah-filter-pill" type="button" data-filter="medinan" data-i18n="medinan" aria-pressed="false">Medinan</button>
+        </fieldset>
 
-        <div id="surah-picker-list" class="surah-picker-list" role="listbox" aria-label="Surahs"></div>
+        <div id="surah-picker-list" class="surah-picker-list" role="listbox" aria-label="Surahs" data-i18n-aria-label="surahList"></div>
 
         <div id="surah-picker-empty" class="surah-picker-empty" hidden>
           <p data-i18n="noSurahsFound">No matching surahs found</p>
